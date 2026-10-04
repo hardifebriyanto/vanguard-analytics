@@ -197,3 +197,4 @@ app.listen(PORT, () => {
   console.log(`🚀 Server Vanguard aktif di: http://localhost:${PORT}`);
   console.log('=========================================');
 });
+module.exports = app;
