@@ -3,210 +3,214 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vanguard Analytics — Multi-Tenant Dashboard</title>
+  <title>Vanguard Analytics — Cloud Hybrid Multi-Tenant</title>
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   <style>
     @media print {
-      body { background-color: white !important; color: black !important; }
-      header, .no-print, #tenantSelect, button { display: none !important; }
-      .bg-slate-800\/60, .bg-slate-800\/40, .bg-slate-900 { background: white !important; border: 1px solid #cbd5e1 !important; color: black !important; }
-      .text-white, .text-slate-300, .text-slate-100 { color: black !important; }
-      .text-slate-400, .text-slate-500 { color: #64748b !important; }
-      .print-header { display: block !important; }
+      body { background: #fff !important; color: #000 !important; }
+      .no-print { display: none !important; }
+      .print-card { border: 1px solid #ccc !important; box-shadow: none !important; background: #fff !important; color: #000 !important; }
+      .text-slate-100, .text-slate-200, .text-slate-300, .text-white { color: #111 !important; }
+      .text-slate-400, .text-slate-500 { color: #555 !important; }
+      .bg-slate-900, .bg-slate-800, .bg-slate-950 { background: #fff !important; }
     }
-    .print-header { display: none; }
   </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen font-sans">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-cyan-500 selection:text-white">
 
-  <!-- PRINT HEADER -->
-  <div class="print-header p-6 border-b border-slate-300 mb-6">
-    <h1 class="text-2xl font-bold uppercase" id="printCompanyName">PT MAJU JAYA</h1>
-    <p class="text-sm text-slate-600">Laporan Eksekutif Vanguard Analytics • Dicetak: <span id="printDate"></span></p>
-  </div>
-
-  <!-- TOP NAVBAR -->
-  <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/80 sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-    <div class="flex items-center space-x-4">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center font-black text-xl shadow-lg shadow-cyan-500/20">
-        V
+  <!-- TOP NAVIGATION / BRANDING -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 via-indigo-600 to-emerald-400 flex items-center justify-center text-white font-extrabold text-xl shadow-lg shadow-cyan-500/20">
+          V
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 id="companyName" class="font-bold text-lg text-white tracking-wide">Nama Perusahaan</h1>
+            <span id="tierBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              BASIC
+            </span>
+          </div>
+          <p id="companySub" class="text-xs text-slate-400">Vanguard Analytics Cloud Hybrid • Tenant ID: <span id="tenantDisplay" class="font-mono text-cyan-400">COMP-001</span></p>
+        </div>
       </div>
-      <div>
-        <h1 class="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-          <span id="companyName">PT Maju Jaya</span>
-          <span class="text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded-full font-mono uppercase tracking-wider" id="companyPackage">ENTERPRISE</span>
-        </h1>
-        <p class="text-xs text-slate-400">Vanguard Analytics Cloud Hybrid • Tenant ID: <span id="companyId" class="text-cyan-400 font-mono font-medium">COMP-001</span></p>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center space-x-3 no-print">
+        <button onclick="window.print()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition shadow-sm">
+          <span>🖨️ Cetak PDF</span>
+        </button>
+        <button onclick="exportToCsv()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition">
+          <span>📊 Export Excel</span>
+        </button>
+        <select id="tenantSelect" onchange="switchTenant(this.value)" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-cyan-500 font-medium">
+          <option value="COMP-001">COMP-001 - PT Maju Jaya</option>
+        </select>
       </div>
-    </div>
-
-    <!-- ACTION BUTTONS -->
-    <div class="flex items-center space-x-3 no-print">
-      <button onclick="window.print()" class="bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-300 text-xs font-semibold px-3.5 py-2 rounded-xl flex items-center gap-2 transition">
-        <i class="fa-solid fa-file-pdf text-rose-400"></i>
-        <span>Download PDF</span>
-      </button>
-
-      <button onclick="exportCSV()" class="bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold px-3.5 py-2 rounded-xl flex items-center gap-2 transition">
-        <i class="fa-solid fa-file-excel text-emerald-400"></i>
-        <span>Export Excel</span>
-      </button>
-
-      <div class="h-6 w-px bg-slate-700 mx-1"></div>
-
-      <select id="tenantSelect" onchange="loadDashboard(this.value)" class="bg-slate-900 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 outline-none focus:border-cyan-500">
-        <option value="COMP-001">COMP-001 - PT Maju Jaya</option>
-        <option value="COMP-002">COMP-002 - PT ABC Indonesia</option>
-      </select>
     </div>
   </header>
 
-  <div class="max-w-7xl mx-auto p-6 space-y-6">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
 
-    <!-- ACTIVE MODULES BAR -->
-    <div class="bg-slate-800/40 border border-slate-700/50 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4">
-      <div class="flex items-center gap-2 text-xs text-slate-400">
-        <i class="fa-solid fa-cubes text-cyan-400"></i>
-        <span>Status Modul Klien (Dikontrol dari Google Sheets):</span>
+    <!-- MODULE STATUS BAR -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
+          <span>⚡ Kontrol Modul Klien (Live dari Google Sheets)</span>
+        </h3>
+        <span class="text-[11px] text-cyan-400 font-mono">Ganti ON/OFF di Sheets lalu Sync</span>
       </div>
-      <div id="moduleBadges" class="flex flex-wrap gap-2"></div>
+      <div id="modulePills" class="flex flex-wrap gap-2">
+        <!-- Injected via JavaScript -->
+        <span class="text-xs text-slate-500">Memuat status modul...</span>
+      </div>
     </div>
 
-    <!-- ========================================== -->
-    <!-- MODUL 1: SALES ANALYTICS (MODUL STANDAR)   -->
-    <!-- ========================================== -->
-    <div>
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-2">
-          <i class="fa-solid fa-chart-line"></i> Modul Penjualan (Sales Analytics)
+    <!-- 1. MODUL PENJUALAN (SALES ANALYTICS) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-cyan-400 flex items-center space-x-2">
+          <span>📈 MODUL PENJUALAN (SALES ANALYTICS)</span>
+          <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded-full border border-cyan-500/30">CORE AKTIF</span>
+        </h2>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- KPI 1: Total Revenue -->
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium uppercase tracking-wider">Total Penjualan</span>
+            <span class="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 text-sm">💵</span>
+          </div>
+          <div id="kpiRevenue" class="text-2xl font-black text-white tracking-tight">Rp 0</div>
+          <span class="text-[11px] text-emerald-400 font-medium">● Real-time dari Neon Cloud</span>
+        </div>
+
+        <!-- KPI 2: Total Transactions -->
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium uppercase tracking-wider">Total Transaksi</span>
+            <span class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 text-sm">🧾</span>
+          </div>
+          <div id="kpiTrx" class="text-2xl font-black text-white tracking-tight">0</div>
+          <span class="text-[11px] text-slate-400 font-medium">Transaksi tervalidasi</span>
+        </div>
+
+        <!-- KPI 3: Total Quantity Sold -->
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium uppercase tracking-wider">Total Qty Terjual</span>
+            <span class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 text-sm">📦</span>
+          </div>
+          <div id="kpiQty" class="text-2xl font-black text-white tracking-tight">0</div>
+          <span class="text-[11px] text-slate-400 font-medium">Item produk keluar</span>
+        </div>
+
+        <!-- KPI 4: Top Product -->
+        <div class="bg-slate-900 border border-slate-800/80 rounded-2xl p-5 shadow-sm">
+          <div class="flex items-center justify-between text-slate-400 mb-2">
+            <span class="text-xs font-medium uppercase tracking-wider">Produk Terlaris</span>
+            <span class="p-2 rounded-xl bg-amber-500/10 text-amber-400 text-sm">⭐</span>
+          </div>
+          <div id="kpiTopProduct" class="text-lg font-bold text-white truncate">-</div>
+          <span class="text-[11px] text-amber-400 font-medium">Penyumbang omzet utama</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MODUL KEUANGAN & LABA RUGI (FINANCIAL ANALYTICS) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 flex items-center space-x-2">
+          <span>💰 MODUL KEUANGAN & LABA RUGI (FINANCIAL ANALYTICS)</span>
+          <span id="financeBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
 
-      <!-- KPI PENJUALAN -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-sm">
-          <div class="flex items-center justify-between text-slate-400 mb-3">
-            <span class="text-xs font-medium uppercase tracking-wider">Total Penjualan</span>
-            <div class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
-              <i class="fa-solid fa-wallet text-sm"></i>
-            </div>
-          </div>
-          <div class="text-2xl font-black text-white" id="totalRevenue">Rp 0</div>
-          <p class="text-xs text-emerald-400 mt-2 font-medium">Real-time dari Neon DB</p>
-        </div>
-
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-sm">
-          <div class="flex items-center justify-between text-slate-400 mb-3">
-            <span class="text-xs font-medium uppercase tracking-wider">Total Transaksi</span>
-            <div class="w-8 h-8 rounded-lg bg-cyan-500/10 text-cyan-400 flex items-center justify-center">
-              <i class="fa-solid fa-receipt text-sm"></i>
-            </div>
-          </div>
-          <div class="text-2xl font-black text-white" id="totalTransactions">0</div>
-          <p class="text-xs text-slate-400 mt-2 font-medium">Transaksi tersimpan</p>
-        </div>
-
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-sm">
-          <div class="flex items-center justify-between text-slate-400 mb-3">
-            <span class="text-xs font-medium uppercase tracking-wider">Total Qty Terjual</span>
-            <div class="w-8 h-8 rounded-lg bg-blue-500/10 text-blue-400 flex items-center justify-center">
-              <i class="fa-solid fa-box text-sm"></i>
-            </div>
-          </div>
-          <div class="text-2xl font-black text-white" id="totalQty">0</div>
-          <p class="text-xs text-slate-400 mt-2 font-medium">Item terjual</p>
-        </div>
-
-        <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-5 shadow-sm">
-          <div class="flex items-center justify-between text-slate-400 mb-3">
-            <span class="text-xs font-medium uppercase tracking-wider">Produk Terlaris</span>
-            <div class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center">
-              <i class="fa-solid fa-star text-sm"></i>
-            </div>
-          </div>
-          <div class="text-lg font-bold text-white truncate" id="topProduct">-</div>
-          <p class="text-xs text-amber-400 mt-2 font-medium">Volume penjualan</p>
-        </div>
+      <!-- Container jika Finance ON atau OFF -->
+      <div id="financeContainer">
+        <!-- Rendered via JS -->
       </div>
-    </div>
+    </section>
 
-    <!-- ============================================================ -->
-    <!-- MODUL 2: FINANCIAL ANALYTICS (HANYA MUNCUL JIKA FINANCE = ON) -->
-    <!-- ============================================================ -->
-    <div id="financeModuleContainer">
-
-      <!-- TAMPILAN JIKA FINANCE = ON -->
-      <div id="financeActiveSection" class="hidden space-y-4">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2">
-            <i class="fa-solid fa-coins"></i> Modul Keuangan & Laba Rugi (Financial Analytics)
-            <span class="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono">AKTIF</span>
-          </h2>
-        </div>
-
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
-          <!-- Kartu Laba Bersih -->
-          <div class="bg-gradient-to-br from-slate-800 to-emerald-950/40 border border-emerald-500/40 rounded-2xl p-5 shadow-lg">
-            <div class="flex items-center justify-between text-emerald-400 mb-3">
-              <span class="text-xs font-bold uppercase tracking-wider">Estimasi Laba Bersih</span>
-              <i class="fa-solid fa-circle-check text-lg"></i>
-            </div>
-            <div class="text-2xl font-black text-emerald-300" id="netProfit">Rp 0</div>
-            <p class="text-xs text-emerald-400 mt-2 font-medium">Margin Keuntungan: <span id="profitMargin" class="font-bold">40%</span></p>
-          </div>
-
-          <!-- Kartu Beban / Pengeluaran -->
-          <div class="bg-gradient-to-br from-slate-800 to-rose-950/40 border border-rose-500/40 rounded-2xl p-5 shadow-lg">
-            <div class="flex items-center justify-between text-rose-400 mb-3">
-              <span class="text-xs font-bold uppercase tracking-wider">Estimasi Beban & HPP</span>
-              <i class="fa-solid fa-receipt text-lg"></i>
-            </div>
-            <div class="text-2xl font-black text-rose-300" id="totalExpenses">Rp 0</div>
-            <p class="text-xs text-rose-400 mt-2 font-medium">Beban Pokok Penjualan (HPP)</p>
-          </div>
-
-          <!-- Kartu Status Arus Kas -->
-          <div class="bg-gradient-to-br from-slate-800 to-blue-950/40 border border-blue-500/40 rounded-2xl p-5 shadow-lg">
-            <div class="flex items-center justify-between text-blue-400 mb-3">
-              <span class="text-xs font-bold uppercase tracking-wider">Kesehatan Keuangan</span>
-              <i class="fa-solid fa-shield-halved text-lg"></i>
-            </div>
-            <div class="text-xl font-black text-blue-300">SANGAT SEHAT</div>
-            <p class="text-xs text-blue-400 mt-2 font-medium">Cash flow operasional positif</p>
-          </div>
-        </div>
+    <!-- 3. MODUL INVENTORI & GUDANG (INVENTORY ANALYTICS) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-purple-400 flex items-center space-x-2">
+          <span>📦 MODUL INVENTORI & STOK GUDANG (INVENTORY ANALYTICS)</span>
+          <span id="inventoryBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
+        </h2>
       </div>
 
-      <!-- TAMPILAN JIKA FINANCE = OFF (TERKUNCI) -->
-      <div id="financeLockedSection" class="bg-slate-800/30 border border-dashed border-slate-700/80 rounded-2xl p-6 text-center">
-        <div class="w-12 h-12 bg-slate-800 text-slate-500 rounded-full flex items-center justify-center mx-auto mb-3 border border-slate-700">
-          <i class="fa-solid fa-lock text-xl"></i>
-        </div>
-        <h3 class="text-sm font-bold text-slate-400 uppercase tracking-wider">Modul Keuangan Terkunci</h3>
-        <p class="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-          Fitur Laba Rugi & Arus Kas tidak aktif pada paket klien ini. Ubah <code class="text-cyan-400 font-mono">FINANCE = ON</code> di Google Sheets lalu Sync untuk membuka fitur ini.
-        </p>
+      <!-- Container jika Inventory ON atau OFF -->
+      <div id="inventoryContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- 4. MODUL PELANGGAN & CRM (CUSTOMER ANALYTICS) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-blue-400 flex items-center space-x-2">
+          <span>👥 MODUL PELANGGAN & CRM (CUSTOMER ANALYTICS)</span>
+          <span id="customerBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
+        </h2>
       </div>
 
-    </div>
+      <!-- Container jika Customer ON atau OFF -->
+      <div id="customerContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
 
-    <!-- CHARTS -->
+    <!-- 5. MODUL OPERASIONAL & PRODUKSI (PRODUCTION ANALYTICS) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-rose-400 flex items-center space-x-2">
+          <span>⚙️ MODUL OPERASIONAL & PRODUKSI (PRODUCTION ANALYTICS)</span>
+          <span id="productionBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
+        </h2>
+      </div>
+
+      <!-- Container jika Production ON atau OFF -->
+      <div id="productionContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- 6. MODUL LAPORAN & AUDIT (REPORT MANAGEMENT) -->
+    <section class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-emerald-400 flex items-center space-x-2">
+          <span>📑 MODUL MANAJEMEN LAPORAN & AUDIT (REPORT MANAGEMENT)</span>
+          <span id="reportBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
+        </h2>
+      </div>
+
+      <!-- Container jika Report ON atau OFF -->
+      <div id="reportContainer">
+        <!-- Rendered via JS -->
+      </div>
+    </section>
+
+    <!-- VISUAL CHARTS (TREN & PRODUK TERLARIS) -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2 bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
+      <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Tren Penjualan (Harian)</h2>
+          <h3 class="text-sm font-bold text-white tracking-wide">Tren Penjualan Harian</h3>
           <span class="text-xs text-slate-400 font-mono">Live PostgreSQL Neon</span>
         </div>
         <div class="h-64">
-          <canvas id="salesChart"></canvas>
+          <canvas id="dailyChart"></canvas>
         </div>
       </div>
-
-      <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl p-6">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Top Produk Terlaris</h2>
+          <h3 class="text-sm font-bold text-white tracking-wide">Top Produk Terlaris</h3>
+          <span class="text-xs text-slate-400 font-mono">Volume Penjualan</span>
         </div>
         <div class="h-64 flex items-center justify-center">
           <canvas id="productChart"></canvas>
@@ -214,153 +218,363 @@
       </div>
     </div>
 
-    <!-- TABLE TRANSAKSI -->
-    <div class="bg-slate-800/60 border border-slate-700/60 rounded-2xl overflow-hidden">
-      <div class="p-5 border-b border-slate-700/60 flex items-center justify-between">
-        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300">Data Transaksi Terbaru (Live Neon DB)</h2>
-        <span class="text-xs bg-slate-900 border border-slate-700 px-3 py-1 rounded-full text-slate-400" id="tableCount">0 Baris</span>
+    <!-- TRANSACTIONS TABLE -->
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h3 class="text-sm font-bold text-white tracking-wide">Data Transaksi Terbaru (Live Neon DB)</h3>
+          <p class="text-xs text-slate-400">Sinkronisasi otomatis dari sheet IMPORT_DATA</p>
+        </div>
+        <span id="trxCountBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-cyan-400 border border-slate-700 font-mono">0 Baris Data</span>
       </div>
       <div class="overflow-x-auto">
-        <table class="w-full text-left text-xs">
-          <thead class="bg-slate-800 text-slate-400 uppercase font-mono border-b border-slate-700">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-800/60 uppercase font-semibold text-slate-400 border-b border-slate-700/80">
             <tr>
-              <th class="p-3 pl-5">No Transaksi</th>
-              <th class="p-3">Tanggal</th>
-              <th class="p-3">Customer</th>
-              <th class="p-3">Produk</th>
-              <th class="p-3 text-right">Qty</th>
-              <th class="p-3 text-right">Total (IDR)</th>
-              <th class="p-3 pr-5 text-center">Cabang</th>
+              <th class="py-3 px-4">No Transaksi</th>
+              <th class="py-3 px-4">Tanggal</th>
+              <th class="py-3 px-4">Customer</th>
+              <th class="py-3 px-4">Produk</th>
+              <th class="py-3 px-4 text-right">Qty</th>
+              <th class="py-3 px-4 text-right">Total (IDR)</th>
+              <th class="py-3 px-4">Cabang</th>
             </tr>
           </thead>
-          <tbody id="transactionRows" class="divide-y divide-slate-700/50 text-slate-300 font-normal">
-            <tr><td colspan="7" class="p-6 text-center text-slate-500">Memuat transaksi...</td></tr>
+          <tbody id="trxTableBody" class="divide-y divide-slate-800">
+            <tr>
+              <td colspan="7" class="py-6 text-center text-slate-500">Memuat data dari Cloud...</td>
+            </tr>
           </tbody>
         </table>
       </div>
     </div>
 
-  </div>
+  </main>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    VANGUARD ANALYTICS CLOUD HYBRID &copy; 2026 • Powered by PostgreSQL Neon & Vercel Serverless
+  </footer>
 
   <script>
-    let salesChartInstance = null;
+    let currentData = null;
+    let dailyChartInstance = null;
     let productChartInstance = null;
-    let currentTransactions = [];
-    let currentCompany = {};
 
     function formatRupiah(num) {
-      return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(num || 0);
+      return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     }
 
     async function loadDashboard(companyId = 'COMP-001') {
       try {
         const res = await fetch(`/api/dashboard/${companyId}`);
         const data = await res.json();
-        if (!data.success) return;
+        if (!data.success) throw new Error(data.message);
 
-        currentTransactions = data.transactions;
-        currentCompany = data.company;
-
-        document.getElementById('companyName').innerText = data.company.company_name || 'Vanguard Tenant';
-        document.getElementById('printCompanyName').innerText = data.company.company_name || 'Vanguard Tenant';
-        document.getElementById('printDate').innerText = new Date().toLocaleDateString('id-ID', { dateStyle: 'full' });
-        document.getElementById('companyId').innerText = data.company.company_id;
-        document.getElementById('companyPackage').innerText = data.company.package || 'ENTERPRISE';
-
-        // 1. Render Badge & Cek Modul FINANCE
-        const badgesContainer = document.getElementById('moduleBadges');
-        badgesContainer.innerHTML = '';
-        let isFinanceOn = false;
-
-        data.modules.forEach(m => {
-          const isActive = m.status === 'ON';
-          if (m.module_code === 'FINANCE' && isActive) {
-            isFinanceOn = true;
-          }
-
-          const badge = document.createElement('span');
-          badge.className = `text-xs px-3 py-1 rounded-lg border font-mono font-medium flex items-center gap-1.5 ${
-            isActive ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/30' : 'bg-slate-800/40 text-slate-500 border-slate-700/40'
-          }`;
-          badge.innerHTML = `<span class="w-1.5 h-1.5 rounded-full ${isActive ? 'bg-cyan-400' : 'bg-slate-600'}"></span> ${m.module_name} (${m.status})`;
-          badgesContainer.appendChild(badge);
-        });
-
-        // 2. KONTROL TAMPILAN MODUL KEUANGAN DINAMIS
-        const financeActive = document.getElementById('financeActiveSection');
-        const financeLocked = document.getElementById('financeLockedSection');
-
-        if (isFinanceOn) {
-          // JIKA FINANCE = ON: TAMPILKAN BLOK KEUANGAN
-          financeActive.classList.remove('hidden');
-          financeLocked.classList.add('hidden');
-
-          // Hitung Angka Keuangan (Laba Bersih ~40%, Beban ~60%)
-          const revenue = Number(data.kpi.totalRevenue || 0);
-          const netProfit = revenue * 0.40;
-          const expenses = revenue * 0.60;
-
-          document.getElementById('netProfit').innerText = formatRupiah(netProfit);
-          document.getElementById('totalExpenses').innerText = formatRupiah(expenses);
-          document.getElementById('profitMargin').innerText = '40.0%';
-        } else {
-          // JIKA FINANCE = OFF: KUNCI BLOK KEUANGAN
-          financeActive.classList.add('hidden');
-          financeLocked.classList.remove('hidden');
-        }
-
-        // 3. Render KPI Standar
-        document.getElementById('totalRevenue').innerText = formatRupiah(data.kpi.totalRevenue);
-        document.getElementById('totalTransactions').innerText = data.kpi.totalTrx;
-        document.getElementById('totalQty').innerText = Number(data.kpi.totalQty).toLocaleString('id-ID');
-        document.getElementById('topProduct').innerText = data.kpi.topProduct || '-';
-
-        // 4. Render Tabel Transaksi
-        const tableBody = document.getElementById('transactionRows');
-        tableBody.innerHTML = '';
-        document.getElementById('tableCount').innerText = `${data.transactions.length} Baris Data`;
-
-        if (data.transactions.length === 0) {
-          tableBody.innerHTML = `<tr><td colspan="7" class="p-6 text-center text-slate-500">Belum ada transaksi di database.</td></tr>`;
-        } else {
-          data.transactions.forEach(trx => {
-            const row = document.createElement('tr');
-            row.className = 'hover:bg-slate-800/40 transition';
-            row.innerHTML = `
-              <td class="p-3 pl-5 font-mono text-cyan-400 font-medium">${trx.transaction_no}</td>
-              <td class="p-3 text-slate-400">${new Date(trx.transaction_date).toLocaleDateString('id-ID')}</td>
-              <td class="p-3 font-medium text-white">${trx.customer_name}</td>
-              <td class="p-3">${trx.product_name}</td>
-              <td class="p-3 text-right font-mono">${trx.qty}</td>
-              <td class="p-3 text-right font-mono text-emerald-400 font-medium">${formatRupiah(trx.total)}</td>
-              <td class="p-3 pr-5 text-center"><span class="bg-slate-800 px-2 py-0.5 rounded text-slate-400">${trx.branch_code || 'PUSAT'}</span></td>
-            `;
-            tableBody.appendChild(row);
-          });
-        }
-
-        renderCharts(data.charts);
+        currentData = data;
+        renderDashboard(data);
       } catch (err) {
-        console.error(err);
+        console.error('Error load dashboard:', err);
       }
     }
 
-    function renderCharts(chartData) {
-      const ctxSales = document.getElementById('salesChart').getContext('2d');
-      if (salesChartInstance) salesChartInstance.destroy();
+    function renderDashboard(data) {
+      // 1. Company Header
+      if (data.company) {
+        document.getElementById('companyName').innerText = data.company.name;
+        document.getElementById('tenantDisplay').innerText = data.company.id;
+      }
 
-      salesChartInstance = new Chart(ctxSales, {
+      // 2. Modules Status
+      const modules = data.modules || [];
+      const pillsContainer = document.getElementById('modulePills');
+      pillsContainer.innerHTML = '';
+
+      let enabledCount = 0;
+      modules.forEach(m => {
+        if (m.is_enabled) enabledCount++;
+        const pill = document.createElement('span');
+        pill.className = `text-[11px] px-3 py-1 rounded-full font-medium border flex items-center space-x-1.5 transition ${
+          m.is_enabled 
+            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
+            : 'bg-slate-800 text-slate-500 border-slate-700/60 line-through'
+        }`;
+        pill.innerHTML = `<span>${m.is_enabled ? '●' : '🔒'}</span> <span>${m.module_name} (${m.is_enabled ? 'ON' : 'OFF'})</span>`;
+        pillsContainer.appendChild(pill);
+      });
+
+      // Update Plan Tier Badge
+      const tierBadge = document.getElementById('tierBadge');
+      if (enabledCount >= 5) {
+        tierBadge.innerText = 'ENTERPRISE SUITE';
+        tierBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm shadow-amber-500/20';
+      } else if (enabledCount >= 3) {
+        tierBadge.innerText = 'PROFESSIONAL TIER';
+        tierBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30';
+      } else {
+        tierBadge.innerText = 'BASIC STARTER';
+        tierBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+      }
+
+      // Check Individual Modules
+      const isFinanceOn = modules.some(m => m.module_code === 'FINANCE' && m.is_enabled);
+      const isInventoryOn = modules.some(m => m.module_code === 'INVENTORY' && m.is_enabled);
+      const isCustomerOn = modules.some(m => m.module_code === 'CUSTOMER' && m.is_enabled);
+      const isProductionOn = modules.some(m => m.module_code === 'PRODUCTION' && m.is_enabled);
+      const isReportOn = modules.some(m => m.module_code === 'REPORT' && m.is_enabled);
+
+      // 3. Render Sales KPIs
+      const rev = data.kpi ? data.kpi.totalRevenue : 0;
+      document.getElementById('kpiRevenue').innerText = formatRupiah(rev);
+      document.getElementById('kpiTrx').innerText = (data.kpi ? data.kpi.totalTrx : 0).toLocaleString('id-ID');
+      document.getElementById('kpiQty').innerText = (data.kpi ? data.kpi.totalQty : 0).toLocaleString('id-ID') + ' item';
+      document.getElementById('kpiTopProduct').innerText = data.kpi && data.kpi.topProduct ? data.kpi.topProduct : 'Belum Ada Transaksi';
+
+      // 4. Render Modul Keuangan (FINANCE)
+      renderFinanceSection(isFinanceOn, rev);
+
+      // 5. Render Modul Inventori (INVENTORY)
+      renderInventorySection(isInventoryOn);
+
+      // 6. Render Modul Pelanggan (CUSTOMER)
+      renderCustomerSection(isCustomerOn, rev, data.kpi ? data.kpi.totalTrx : 0);
+
+      // 7. Render Modul Produksi (PRODUCTION)
+      renderProductionSection(isProductionOn);
+
+      // 8. Render Modul Laporan (REPORT)
+      renderReportSection(isReportOn);
+
+      // 9. Render Charts & Tables
+      renderCharts(data.charts);
+      renderTable(data.transactions);
+    }
+
+    // Helper Card Terkunci
+    function lockedCardHtml(title, desc, code) {
+      return `
+        <div class="border border-dashed border-slate-800 rounded-2xl p-6 text-center bg-slate-900/40 backdrop-blur-sm">
+          <div class="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-slate-800/80 text-amber-400 mb-3 border border-slate-700/80 shadow-inner">
+            🔒
+          </div>
+          <h4 class="text-sm font-bold text-slate-300 tracking-wider uppercase">${title} TERKUNCI</h4>
+          <p class="text-xs text-slate-500 mt-1.5 max-w-lg mx-auto">${desc}</p>
+          <div class="mt-3 inline-block text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-3 py-1 rounded-full">
+            💡 Buka Google Sheets > Tab MODULES > Ubah ${code} = ON > Klik Sync
+          </div>
+        </div>
+      `;
+    }
+
+    // 4. Modul Keuangan
+    function renderFinanceSection(isOn, rev) {
+      const badge = document.getElementById('financeBadge');
+      const container = document.getElementById('financeContainer');
+      if (isOn) {
+        badge.innerText = 'AKTIF';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+        const netProfit = rev * 0.40;
+        const cogsExpense = rev * 0.60;
+        container.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-gradient-to-br from-slate-900 to-emerald-950/30 border border-emerald-800/40 rounded-2xl p-5 shadow-sm">
+              <div class="flex items-center justify-between text-emerald-400 mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider">Estimasi Laba Bersih</span>
+                <span class="text-sm">📈</span>
+              </div>
+              <div class="text-2xl font-black text-white">${formatRupiah(netProfit)}</div>
+              <span class="text-[11px] text-emerald-400">Margin Keuntungan: 40.0%</span>
+            </div>
+            <div class="bg-gradient-to-br from-slate-900 to-rose-950/30 border border-rose-800/40 rounded-2xl p-5 shadow-sm">
+              <div class="flex items-center justify-between text-rose-400 mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider">Estimasi Beban & HPP</span>
+                <span class="text-sm">📉</span>
+              </div>
+              <div class="text-2xl font-black text-white">${formatRupiah(cogsExpense)}</div>
+              <span class="text-[11px] text-rose-400">Beban Pokok Penjualan (HPP)</span>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
+              <div class="flex items-center justify-between text-slate-400 mb-2">
+                <span class="text-xs font-semibold uppercase tracking-wider">Kesehatan Keuangan</span>
+                <span class="text-sm">🏦</span>
+              </div>
+              <div class="text-xl font-bold text-cyan-400">SANGAT SEHAT</div>
+              <span class="text-[11px] text-slate-400">Cash flow operasional positif</span>
+            </div>
+          </div>
+        `;
+      } else {
+        badge.innerText = 'TERKUNCI (OFF)';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
+        container.innerHTML = lockedCardHtml('Modul Keuangan & Laba Rugi', 'Analitik Laba Bersih, HPP, Arus Kas dan Rasio Profitabilitas saat ini terkunci.', 'FINANCE');
+      }
+    }
+
+    // 5. Modul Inventori
+    function renderInventorySection(isOn) {
+      const badge = document.getElementById('inventoryBadge');
+      const container = document.getElementById('inventoryContainer');
+      if (isOn) {
+        badge.innerText = 'AKTIF';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-purple-500/20 text-purple-300 border-purple-500/30';
+        container.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Total SKU Aktif</div>
+              <div class="text-xl font-bold text-white">148 Produk</div>
+              <div class="text-[11px] text-purple-400 mt-1">● 4 Gudang Terhubung</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Nilai Aset Stok</div>
+              <div class="text-xl font-bold text-emerald-400">Rp 142.500.000</div>
+              <div class="text-[11px] text-slate-400 mt-1">Valuasi metode FIFO</div>
+            </div>
+            <div class="bg-slate-900 border border-rose-900/40 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-rose-400 font-medium uppercase mb-1">Peringatan Stok Menipis</div>
+              <div class="text-xl font-bold text-rose-400">3 Item Kritis</div>
+              <div class="text-[11px] text-rose-300 mt-1">⚠️ Perlu reorder segera</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Perputaran Gudang</div>
+              <div class="text-xl font-bold text-cyan-400">5.4x / Tahun</div>
+              <div class="text-[11px] text-slate-400 mt-1">Turnover sangat sehat</div>
+            </div>
+          </div>
+        `;
+      } else {
+        badge.innerText = 'TERKUNCI (OFF)';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
+        container.innerHTML = lockedCardHtml('Modul Inventori & Gudang', 'Fitur pelacakan stok otomatis, valuasi aset gudang, dan alert barang habis terkunci.', 'INVENTORY');
+      }
+    }
+
+    // 6. Modul Pelanggan
+    function renderCustomerSection(isOn, rev, trxCount) {
+      const badge = document.getElementById('customerBadge');
+      const container = document.getElementById('customerContainer');
+      if (isOn) {
+        badge.innerText = 'AKTIF';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-blue-500/20 text-blue-300 border-blue-500/30';
+        const aov = trxCount > 0 ? rev / trxCount : 0;
+        container.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Total Pelanggan Terdaftar</div>
+              <div class="text-xl font-bold text-white">84 Member</div>
+              <div class="text-[11px] text-blue-400 mt-1">+14 Klien Baru Bulan Ini</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Repeat Order Rate</div>
+              <div class="text-xl font-bold text-emerald-400">76.8%</div>
+              <div class="text-[11px] text-slate-400 mt-1">Tingkat loyalitas tinggi</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Rata-rata Belanja (AOV)</div>
+              <div class="text-xl font-bold text-white">${formatRupiah(aov)}</div>
+              <div class="text-[11px] text-slate-400 mt-1">Per transaksi pembelian</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Top VIP Customer</div>
+              <div class="text-base font-bold text-amber-400 truncate">Cafe Senja</div>
+              <div class="text-[11px] text-slate-400 mt-1">Kontribusi omzet 42%</div>
+            </div>
+          </div>
+        `;
+      } else {
+        badge.innerText = 'TERKUNCI (OFF)';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
+        container.innerHTML = lockedCardHtml('Modul Pelanggan & CRM', 'Analisis segmentasi pelanggan, retensi repeat order, dan ranking VIP klien terkunci.', 'CUSTOMER');
+      }
+    }
+
+    // 7. Modul Produksi
+    function renderProductionSection(isOn) {
+      const badge = document.getElementById('productionBadge');
+      const container = document.getElementById('productionContainer');
+      if (isOn) {
+        badge.innerText = 'AKTIF';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-rose-500/20 text-rose-300 border-rose-500/30';
+        container.innerHTML = `
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Output Produksi</div>
+              <div class="text-xl font-bold text-white">1.250 Unit / Hari</div>
+              <div class="text-[11px] text-rose-400 mt-1">94% dari target kapasitas</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Efisiensi Mesin (OEE)</div>
+              <div class="text-xl font-bold text-emerald-400">89.2%</div>
+              <div class="text-[11px] text-slate-400 mt-1">Standar industri prima</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Defect / Reject Rate</div>
+              <div class="text-xl font-bold text-cyan-400">0.5%</div>
+              <div class="text-[11px] text-emerald-400 mt-1">Sangat presisi (Di bawah batas 1%)</div>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
+              <div class="text-xs text-slate-400 font-medium uppercase mb-1">Lead Time Produksi</div>
+              <div class="text-xl font-bold text-white">1.8 Hari</div>
+              <div class="text-[11px] text-slate-400 mt-1">Ketepatan kirim: 98.2%</div>
+            </div>
+          </div>
+        `;
+      } else {
+        badge.innerText = 'TERKUNCI (OFF)';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
+        container.innerHTML = lockedCardHtml('Modul Operasional & Produksi', 'Pelacakan output pabrik, efisiensi kerja mesin, dan tingkat reject produksi terkunci.', 'PRODUCTION');
+      }
+    }
+
+    // 8. Modul Laporan
+    function renderReportSection(isOn) {
+      const badge = document.getElementById('reportBadge');
+      const container = document.getElementById('reportContainer');
+      if (isOn) {
+        badge.innerText = 'AKTIF';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+        container.innerHTML = `
+          <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <div class="text-sm font-bold text-white">Pusat Cetak Dokumen & Audit Resmi</div>
+              <div class="text-xs text-slate-400 mt-0.5">Ekspor otomatis laporan pajak, neraca, dan performa cabang untuk stakeholder</div>
+            </div>
+            <div class="flex items-center space-x-2">
+              <button onclick="window.print()" class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-sm transition">
+                🖨️ Laporan Audit PDF
+              </button>
+              <button onclick="exportToCsv()" class="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition">
+                📑 Rekap Transaksi CSV
+              </button>
+            </div>
+          </div>
+        `;
+      } else {
+        badge.innerText = 'TERKUNCI (OFF)';
+        badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
+        container.innerHTML = lockedCardHtml('Modul Manajemen Laporan & Audit', 'Fitur cetak otomatis laporan audit investor dan pembukuan pajak terkunci.', 'REPORT');
+      }
+    }
+
+    // Render Charts
+    function renderCharts(charts) {
+      if (!charts) return;
+
+      // 1. Daily Sales Chart
+      const dailyCtx = document.getElementById('dailyChart').getContext('2d');
+      if (dailyChartInstance) dailyChartInstance.destroy();
+      dailyChartInstance = new Chart(dailyCtx, {
         type: 'line',
         data: {
-          labels: chartData.daily.labels,
+          labels: charts.daily ? charts.daily.labels : [],
           datasets: [{
-            label: 'Total Penjualan (IDR)',
-            data: chartData.daily.values,
+            label: 'Omzet Harian (IDR)',
+            data: charts.daily ? charts.daily.values : [],
             borderColor: '#06b6d4',
             backgroundColor: 'rgba(6, 182, 212, 0.1)',
             fill: true,
-            tension: 0.3,
-            borderWidth: 2
+            tension: 0.35,
+            borderWidth: 2,
+            pointBackgroundColor: '#06b6d4',
+            pointRadius: 4
           }]
         },
         options: {
@@ -374,46 +588,84 @@
         }
       });
 
-      const ctxProduct = document.getElementById('productChart').getContext('2d');
+      // 2. Product Doughnut Chart
+      const prodCtx = document.getElementById('productChart').getContext('2d');
       if (productChartInstance) productChartInstance.destroy();
-
-      productChartInstance = new Chart(ctxProduct, {
+      productChartInstance = new Chart(prodCtx, {
         type: 'doughnut',
         data: {
-          labels: chartData.topProducts.labels,
+          labels: charts.topProducts ? charts.topProducts.labels : [],
           datasets: [{
-            data: chartData.topProducts.values,
-            backgroundColor: ['#06b6d4', '#3b82f6', '#8b5cf6', '#10b981', '#f59e0b'],
+            data: charts.topProducts ? charts.topProducts.values : [],
+            backgroundColor: ['#06b6d4', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899'],
             borderWidth: 0
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } } }
+          plugins: {
+            legend: { position: 'bottom', labels: { color: '#94a3b8', font: { size: 10 } } }
+          }
         }
       });
     }
 
-    function exportCSV() {
-      if (!currentTransactions || currentTransactions.length === 0) {
-        alert('Tidak ada transaksi!');
+    // Render Table
+    function renderTable(transactions) {
+      const tbody = document.getElementById('trxTableBody');
+      const badge = document.getElementById('trxCountBadge');
+      if (!transactions || transactions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada transaksi. Silakan input di Google Sheets lalu Sync.</td></tr>';
+        badge.innerText = '0 Baris Data';
         return;
       }
-      let csv = 'No Transaksi,Tanggal,Customer,Produk,Qty,Total,Cabang\n';
-      currentTransactions.forEach(t => {
-        csv += `"${t.transaction_no}","${new Date(t.transaction_date).toLocaleDateString('id-ID')}","${t.customer_name}","${t.product_name}",${t.qty},${t.total},"${t.branch_code}"\n`;
-      });
-      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      badge.innerText = `${transactions.length} Baris Data`;
+      tbody.innerHTML = transactions.map(t => `
+        <tr class="hover:bg-slate-800/40 transition">
+          <td class="py-3 px-4 font-mono text-cyan-400 font-semibold">${t.trx_id || '-'}</td>
+          <td class="py-3 px-4 text-slate-400">${t.trx_date ? new Date(t.trx_date).toLocaleDateString('id-ID') : '-'}</td>
+          <td class="py-3 px-4 text-white font-medium">${t.customer_name || '-'}</td>
+          <td class="py-3 px-4 text-slate-300">${t.product_name || '-'}</td>
+          <td class="py-3 px-4 text-right font-semibold text-white">${Number(t.qty || 0).toLocaleString('id-ID')}</td>
+          <td class="py-3 px-4 text-right font-bold text-emerald-400">${formatRupiah(t.total_amount)}</td>
+          <td class="py-3 px-4 text-slate-400 uppercase tracking-wider text-[11px]">${t.branch_name || '-'}</td>
+        </tr>
+      `).join('');
+    }
+
+    // Export CSV
+    function exportToCsv() {
+      if (!currentData || !currentData.transactions || currentData.transactions.length === 0) {
+        alert('Tidak ada data transaksi untuk diekspor!');
+        return;
+      }
+      const headers = ['No Transaksi', 'Tanggal', 'Customer', 'Produk', 'Qty', 'Total IDR', 'Cabang'];
+      const rows = currentData.transactions.map(t => [
+        t.trx_id,
+        t.trx_date ? t.trx_date.split('T')[0] : '',
+        `"${t.customer_name || ''}"`,
+        `"${t.product_name || ''}"`,
+        t.qty,
+        t.total_amount,
+        `"${t.branch_name || ''}"`
+      ]);
+      const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.setAttribute('download', `Laporan_Transaksi_${currentCompany.company_name || 'Vanguard'}.csv`);
+      link.setAttribute('href', encodedUri);
+      link.setAttribute('download', `Vanguard_Export_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
     }
 
-    document.addEventListener('DOMContentLoaded', () => loadDashboard('COMP-001'));
+    function switchTenant(tenantId) {
+      loadDashboard(tenantId);
+    }
+
+    // Start loading
+    loadDashboard('COMP-001');
   </script>
 </body>
 </html>
