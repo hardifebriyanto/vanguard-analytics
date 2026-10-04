@@ -30,7 +30,7 @@
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <h1 id="companyName" class="font-bold text-lg text-white tracking-wide">Nama Perusahaan</h1>
+            <h1 id="companyName" class="font-bold text-lg text-white tracking-wide">PT Maju Jaya</h1>
             <span id="tierBadge" class="text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               BASIC
             </span>
@@ -65,7 +65,6 @@
         <span class="text-[11px] text-cyan-400 font-mono">Ganti ON/OFF di Sheets lalu Sync</span>
       </div>
       <div id="modulePills" class="flex flex-wrap gap-2">
-        <!-- Injected via JavaScript -->
         <span class="text-xs text-slate-500">Memuat status modul...</span>
       </div>
     </div>
@@ -105,7 +104,7 @@
             <span class="text-xs font-medium uppercase tracking-wider">Total Qty Terjual</span>
             <span class="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 text-sm">📦</span>
           </div>
-          <div id="kpiQty" class="text-2xl font-black text-white tracking-tight">0</div>
+          <div id="kpiQty" class="text-2xl font-black text-white tracking-tight">0 item</div>
           <span class="text-[11px] text-slate-400 font-medium">Item produk keluar</span>
         </div>
 
@@ -129,11 +128,7 @@
           <span id="financeBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
-
-      <!-- Container jika Finance ON atau OFF -->
-      <div id="financeContainer">
-        <!-- Rendered via JS -->
-      </div>
+      <div id="financeContainer"></div>
     </section>
 
     <!-- 3. MODUL INVENTORI & GUDANG (INVENTORY ANALYTICS) -->
@@ -144,11 +139,7 @@
           <span id="inventoryBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
-
-      <!-- Container jika Inventory ON atau OFF -->
-      <div id="inventoryContainer">
-        <!-- Rendered via JS -->
-      </div>
+      <div id="inventoryContainer"></div>
     </section>
 
     <!-- 4. MODUL PELANGGAN & CRM (CUSTOMER ANALYTICS) -->
@@ -159,11 +150,7 @@
           <span id="customerBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
-
-      <!-- Container jika Customer ON atau OFF -->
-      <div id="customerContainer">
-        <!-- Rendered via JS -->
-      </div>
+      <div id="customerContainer"></div>
     </section>
 
     <!-- 5. MODUL OPERASIONAL & PRODUKSI (PRODUCTION ANALYTICS) -->
@@ -174,11 +161,7 @@
           <span id="productionBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
-
-      <!-- Container jika Production ON atau OFF -->
-      <div id="productionContainer">
-        <!-- Rendered via JS -->
-      </div>
+      <div id="productionContainer"></div>
     </section>
 
     <!-- 6. MODUL LAPORAN & AUDIT (REPORT MANAGEMENT) -->
@@ -189,11 +172,7 @@
           <span id="reportBadge" class="text-[10px] px-2 py-0.5 rounded-full border"></span>
         </h2>
       </div>
-
-      <!-- Container jika Report ON atau OFF -->
-      <div id="reportContainer">
-        <!-- Rendered via JS -->
-      </div>
+      <div id="reportContainer"></div>
     </section>
 
     <!-- VISUAL CHARTS (TREN & PRODUK TERLARIS) -->
@@ -264,6 +243,13 @@
       return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     }
 
+    // Helper untuk mengecek apakah status ON/True
+    function isValOn(val) {
+      if (val === true || val === 1 || val === '1' || val === 't' || val === 'true') return true;
+      if (typeof val === 'string' && val.trim().toUpperCase() === 'ON') return true;
+      return false;
+    }
+
     async function loadDashboard(companyId = 'COMP-001') {
       try {
         const res = await fetch(`/api/dashboard/${companyId}`);
@@ -278,11 +264,10 @@
     }
 
     function renderDashboard(data) {
-      // 1. Company Header
-      if (data.company) {
-        document.getElementById('companyName').innerText = data.company.name;
-        document.getElementById('tenantDisplay').innerText = data.company.id;
-      }
+      // 1. Company Header (Fix: nama perusahaan & ID)
+      const comp = data.company || {};
+      document.getElementById('companyName').innerText = comp.company_name || comp.name || 'PT Maju Jaya';
+      document.getElementById('tenantDisplay').innerText = comp.company_id || comp.id || 'COMP-001';
 
       // 2. Modules Status
       const modules = data.modules || [];
@@ -291,14 +276,15 @@
 
       let enabledCount = 0;
       modules.forEach(m => {
-        if (m.is_enabled) enabledCount++;
+        const active = isValOn(m.is_enabled);
+        if (active) enabledCount++;
         const pill = document.createElement('span');
         pill.className = `text-[11px] px-3 py-1 rounded-full font-medium border flex items-center space-x-1.5 transition ${
-          m.is_enabled 
-            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' 
+          active 
+            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30 font-semibold' 
             : 'bg-slate-800 text-slate-500 border-slate-700/60 line-through'
         }`;
-        pill.innerHTML = `<span>${m.is_enabled ? '●' : '🔒'}</span> <span>${m.module_name} (${m.is_enabled ? 'ON' : 'OFF'})</span>`;
+        pill.innerHTML = `<span>${active ? '●' : '🔒'}</span> <span>${m.module_name} (${active ? 'ON' : 'OFF'})</span>`;
         pillsContainer.appendChild(pill);
       });
 
@@ -316,11 +302,11 @@
       }
 
       // Check Individual Modules
-      const isFinanceOn = modules.some(m => m.module_code === 'FINANCE' && m.is_enabled);
-      const isInventoryOn = modules.some(m => m.module_code === 'INVENTORY' && m.is_enabled);
-      const isCustomerOn = modules.some(m => m.module_code === 'CUSTOMER' && m.is_enabled);
-      const isProductionOn = modules.some(m => m.module_code === 'PRODUCTION' && m.is_enabled);
-      const isReportOn = modules.some(m => m.module_code === 'REPORT' && m.is_enabled);
+      const isFinanceOn = modules.some(m => m.module_code === 'FINANCE' && isValOn(m.is_enabled));
+      const isInventoryOn = modules.some(m => m.module_code === 'INVENTORY' && isValOn(m.is_enabled));
+      const isCustomerOn = modules.some(m => m.module_code === 'CUSTOMER' && isValOn(m.is_enabled));
+      const isProductionOn = modules.some(m => m.module_code === 'PRODUCTION' && isValOn(m.is_enabled));
+      const isReportOn = modules.some(m => m.module_code === 'REPORT' && isValOn(m.is_enabled));
 
       // 3. Render Sales KPIs
       const rev = data.kpi ? data.kpi.totalRevenue : 0;
@@ -329,22 +315,14 @@
       document.getElementById('kpiQty').innerText = (data.kpi ? data.kpi.totalQty : 0).toLocaleString('id-ID') + ' item';
       document.getElementById('kpiTopProduct').innerText = data.kpi && data.kpi.topProduct ? data.kpi.topProduct : 'Belum Ada Transaksi';
 
-      // 4. Render Modul Keuangan (FINANCE)
+      // 4. Render Sections
       renderFinanceSection(isFinanceOn, rev);
-
-      // 5. Render Modul Inventori (INVENTORY)
       renderInventorySection(isInventoryOn);
-
-      // 6. Render Modul Pelanggan (CUSTOMER)
       renderCustomerSection(isCustomerOn, rev, data.kpi ? data.kpi.totalTrx : 0);
-
-      // 7. Render Modul Produksi (PRODUCTION)
       renderProductionSection(isProductionOn);
-
-      // 8. Render Modul Laporan (REPORT)
       renderReportSection(isReportOn);
 
-      // 9. Render Charts & Tables
+      // 5. Render Charts & Tables
       renderCharts(data.charts);
       renderTable(data.transactions);
     }
@@ -359,7 +337,7 @@
           <h4 class="text-sm font-bold text-slate-300 tracking-wider uppercase">${title} TERKUNCI</h4>
           <p class="text-xs text-slate-500 mt-1.5 max-w-lg mx-auto">${desc}</p>
           <div class="mt-3 inline-block text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-3 py-1 rounded-full">
-            💡 Buka Google Sheets > Tab MODULES > Ubah ${code} = ON > Klik Sync
+            💡 Buka Google Sheets > Tab MODULES > Ubah ${code} = ON > Klik VANGUARD > SYNC
           </div>
         </div>
       `;
@@ -558,7 +536,6 @@
     function renderCharts(charts) {
       if (!charts) return;
 
-      // 1. Daily Sales Chart
       const dailyCtx = document.getElementById('dailyChart').getContext('2d');
       if (dailyChartInstance) dailyChartInstance.destroy();
       dailyChartInstance = new Chart(dailyCtx, {
@@ -588,7 +565,6 @@
         }
       });
 
-      // 2. Product Doughnut Chart
       const prodCtx = document.getElementById('productChart').getContext('2d');
       if (productChartInstance) productChartInstance.destroy();
       productChartInstance = new Chart(prodCtx, {
