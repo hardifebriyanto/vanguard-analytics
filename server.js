@@ -59,16 +59,10 @@ app.post('/api/sync/config', async (req, res) => {
   try {
     const { company, modules, branches } = req.body;
 
-    await client.query('BEGIN');
-
-    // Auto-migrate tabel & kolom jika belum ada
-    try {
-      await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`);
-      await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
-      await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100);`);
-    } catch (e) {
-      console.log('Notice schema check:', e.message);
-    }
+    // Auto-migrate struktur tabel secara mandiri
+    try { await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`); } catch (e) {}
+    try { await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`); } catch (e) {}
+    try { await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100);`); } catch (e) {}
 
     // Upsert Company
     if (company) {
@@ -113,7 +107,6 @@ app.post('/api/sync/config', async (req, res) => {
             SET module_name = EXCLUDED.module_name, is_enabled = EXCLUDED.is_enabled;
           `, [m.company_id, m.module_code, m.module_name, isEnabled]);
         } catch (mErr) {
-          // Fallback aman jika tabel belum memiliki unique index
           const updateRes = await client.query(`
             UPDATE modules 
             SET module_name = $3, is_enabled = $4 
@@ -154,10 +147,8 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    await client.query('COMMIT');
     res.json({ success: true, message: 'Konfigurasi master & modul berhasil diupdate!' });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Error sync config:', err);
     res.status(500).json({ success: false, message: err.message });
   } finally {
@@ -179,8 +170,6 @@ app.post('/api/sync/import', async (req, res) => {
     if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
       return res.json({ success: true, message: 'Tidak ada data transaksi.' });
     }
-
-    await client.query('BEGIN');
 
     for (const t of transactions) {
       try {
@@ -216,10 +205,8 @@ app.post('/api/sync/import', async (req, res) => {
       }
     }
 
-    await client.query('COMMIT');
     res.json({ success: true, message: `${transactions.length} transaksi berhasil disinkron!` });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Error import:', err);
     res.status(500).json({ success: false, message: err.message });
   } finally {
@@ -233,7 +220,6 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   const client = await pool.connect();
 
   try {
-    // Auto-migrate jika kolom is_enabled belum ada
     try {
       await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
     } catch (e) {}
