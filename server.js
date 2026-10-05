@@ -9,79 +9,46 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
-// Database Connection
+// Database Connection Pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-// Helper 1: Auto-Migrate Database (Mengubah company_id ke VARCHAR & Menambahkan product_id)
-async function autoMigrateDatabase(client) {
+// Helper 1: Migrasi Mandiri (Tanpa Blok Transaksi agar Tidak Pernah Abort)
+async function runMigration() {
   try {
-    await client.query(`
-      DO $$ 
-      BEGIN 
-        -- Drop foreign key jika ada agar tipe data bisa diubah
-        ALTER TABLE products DROP CONSTRAINT IF EXISTS fk_company CASCADE;
-        ALTER TABLE products DROP CONSTRAINT IF EXISTS products_company_id_fkey CASCADE;
-        ALTER TABLE branches DROP CONSTRAINT IF EXISTS branches_company_id_fkey CASCADE;
-        ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_company_id_fkey CASCADE;
+    // Drop foreign key constraints jika ada agar tipe data bisa diubah bebas
+    await pool.query(`ALTER TABLE products DROP CONSTRAINT IF EXISTS fk_company CASCADE`).catch(() => {});
+    await pool.query(`ALTER TABLE products DROP CONSTRAINT IF EXISTS products_company_id_fkey CASCADE`).catch(() => {});
+    await pool.query(`ALTER TABLE branches DROP CONSTRAINT IF EXISTS branches_company_id_fkey CASCADE`).catch(() => {});
+    await pool.query(`ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_company_id_fkey CASCADE`).catch(() => {});
 
-        -- Ubah tipe company_id di companies menjadi VARCHAR
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'companies' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
-        ) THEN
-          ALTER TABLE companies ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
-        END IF;
+    // Pastikan company_id bertipe VARCHAR di semua tabel
+    await pool.query(`ALTER TABLE companies ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR`).catch(() => {});
+    await pool.query(`ALTER TABLE branches ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR`).catch(() => {});
+    await pool.query(`ALTER TABLE products ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR`).catch(() => {});
+    await pool.query(`ALTER TABLE transactions ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR`).catch(() => {});
 
-        -- Ubah tipe company_id di products menjadi VARCHAR
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'products' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
-        ) THEN
-          ALTER TABLE products ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
-        END IF;
-
-        -- Ubah tipe company_id di branches menjadi VARCHAR
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'branches' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
-        ) THEN
-          ALTER TABLE branches ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
-        END IF;
-
-        -- Ubah tipe company_id di transactions menjadi VARCHAR
-        IF EXISTS (
-          SELECT 1 FROM information_schema.columns 
-          WHERE table_name = 'transactions' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
-        ) THEN
-          ALTER TABLE transactions ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
-        END IF;
-
-        -- Pastikan kolom product_id dan stok ada di tabel products
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS product_id VARCHAR(100);
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in NUMERIC DEFAULT 0;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold NUMERIC DEFAULT 0;
-        ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock NUMERIC DEFAULT 0;
-      END $$;
-    `);
-  } catch (err) {
-    console.warn('Auto-Migration Notice:', err.message);
+    // Pastikan kolom penampung kode dan stok ada di tabel products
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS product_id VARCHAR(100)`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in NUMERIC DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold NUMERIC DEFAULT 0`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock NUMERIC DEFAULT 0`).catch(() => {});
+  } catch (e) {
+    console.warn('Migration Notice:', e.message);
   }
 }
 
-// Helper 2: Auto-Register Tenant Baru & Cabang Default
-async function ensureCompanyAndBranch(client, companyId, companyName = null) {
-  await autoMigrateDatabase(client);
-
+// Helper 2: Pastikan Company dan Cabang Default Terdaftar
+async function ensureCompanyAndBranch(companyId, companyName = null) {
   const cleanId = String(companyId || 'COMP-001').trim();
   const displayName = companyName || cleanId;
 
-  // 1. Cek / Buat Company
-  const compCheck = await client.query('SELECT company_id FROM companies WHERE company_id::VARCHAR = $1', [cleanId]);
+  // Cek apakah company sudah ada
+  const compCheck = await pool.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [cleanId]);
   if (compCheck.rows.length === 0) {
-    const colRes = await client.query(
+    const colRes = await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'companies'`
     );
     const cols = colRes.rows.map(r => r.column_name.toLowerCase());
@@ -97,16 +64,16 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
     if (cols.includes('package_id')) { insertCols.push('package_id'); insertVals.push('BASIC'); placeholders.push(`$${idx++}`); }
     else if (cols.includes('plan_tier')) { insertCols.push('plan_tier'); insertVals.push('PRO'); placeholders.push(`$${idx++}`); }
 
-    await client.query(
+    await pool.query(
       `INSERT INTO companies (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
       insertVals
     );
   }
 
-  // 2. Cek / Buat Cabang Default
-  const branchCheck = await client.query('SELECT branch_id FROM branches WHERE company_id::VARCHAR = $1', [cleanId]);
+  // Cek apakah branch default sudah ada
+  const branchCheck = await pool.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [cleanId]);
   if (branchCheck.rows.length === 0) {
-    const bColRes = await client.query(
+    const bColRes = await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'`
     );
     const bCols = bColRes.rows.map(r => r.column_name.toLowerCase());
@@ -119,7 +86,7 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
     if (bCols.includes('branch_name')) { bColsList.push('branch_name'); bValsList.push('Cabang Utama'); bPlaceholders.push(`$${bIdx++}`); }
     else if (bCols.includes('name')) { bColsList.push('name'); bValsList.push('Cabang Utama'); bPlaceholders.push(`$${bIdx++}`); }
 
-    await client.query(
+    await pool.query(
       `INSERT INTO branches (${bColsList.join(', ')}) VALUES (${bPlaceholders.join(', ')})`,
       bValsList
     );
@@ -129,13 +96,13 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
 // 1. INIT POS (Load Toko, Cabang, dan Produk)
 app.get('/api/pos/init/:companyId', async (req, res) => {
   const { companyId } = req.params;
-  const client = await pool.connect();
   try {
-    await ensureCompanyAndBranch(client, companyId);
+    await runMigration();
+    await ensureCompanyAndBranch(companyId);
 
-    const compRes = await client.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1 ORDER BY branch_id ASC', [companyId]);
-    const prodRes = await client.query(
+    const compRes = await pool.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
+    const branchRes = await pool.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1 ORDER BY branch_id ASC', [companyId]);
+    const prodRes = await pool.query(
       'SELECT * FROM products WHERE company_id::VARCHAR = $1 AND (is_active = true OR is_active IS NULL)',
       [companyId]
     );
@@ -168,8 +135,6 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
   } catch (err) {
     console.error('POS Init Error:', err);
     res.status(500).json({ success: false, error: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -180,14 +145,11 @@ app.post('/api/pos/sync-products', async (req, res) => {
     return res.status(400).json({ success: false, error: 'company_id and products array are required' });
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
+    await runMigration();
+    await ensureCompanyAndBranch(company_id, company_name);
 
-    // Pastikan Tenant & Cabang Ada (termasuk migrasi VARCHAR)
-    await ensureCompanyAndBranch(client, company_id, company_name);
-
-    const pColRes = await client.query(
+    const pColRes = await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
     );
     const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
@@ -204,10 +166,18 @@ app.post('/api/pos/sync-products', async (req, res) => {
       if (isNaN(cStock)) cStock = sIn - sSold;
 
       // Cek apakah produk sudah ada
-      const check = await client.query(
-        `SELECT * FROM products WHERE company_id::VARCHAR = $1 AND (product_id = $2 OR (id IS NOT NULL AND id::VARCHAR = $2))`,
-        [company_id, pId]
-      );
+      let check;
+      if (pCols.includes('product_id')) {
+        check = await pool.query(
+          `SELECT * FROM products WHERE company_id::VARCHAR = $1 AND product_id = $2`,
+          [company_id, pId]
+        );
+      } else {
+        check = await pool.query(
+          `SELECT * FROM products WHERE company_id::VARCHAR = $1 AND name = $2`,
+          [company_id, pName]
+        );
+      }
 
       if (check.rows.length > 0) {
         // UPDATE
@@ -224,12 +194,16 @@ app.post('/api/pos/sync-products', async (req, res) => {
         if (pCols.includes('current_stock')) { setClauses.push(`current_stock = $${uIdx++}`); updateVals.push(cStock); }
         if (pCols.includes('stock')) { setClauses.push(`stock = $${uIdx++}`); updateVals.push(cStock); }
         if (pCols.includes('is_active')) { setClauses.push(`is_active = $${uIdx++}`); updateVals.push(true); }
-        if (pCols.includes('product_id')) { setClauses.push(`product_id = $${uIdx++}`); updateVals.push(pId); }
 
-        updateVals.push(company_id, pId);
-        await client.query(
-          `UPDATE products SET ${setClauses.join(', ')} 
-           WHERE company_id::VARCHAR = $${uIdx++} AND (product_id = $${uIdx++} OR (id IS NOT NULL AND id::VARCHAR = $${uIdx - 1}))`,
+        updateVals.push(company_id);
+        const whereClause = pCols.includes('product_id') 
+          ? `company_id::VARCHAR = $${uIdx++} AND product_id = $${uIdx++}` 
+          : `company_id::VARCHAR = $${uIdx++} AND name = $${uIdx++}`;
+        
+        updateVals.push(pCols.includes('product_id') ? pId : pName);
+
+        await pool.query(
+          `UPDATE products SET ${setClauses.join(', ')} WHERE ${whereClause}`,
           updateVals
         );
       } else {
@@ -250,21 +224,17 @@ app.post('/api/pos/sync-products', async (req, res) => {
         if (pCols.includes('stock')) { insertCols.push('stock'); insertVals.push(cStock); placeholders.push(`$${iIdx++}`); }
         if (pCols.includes('is_active')) { insertCols.push('is_active'); insertVals.push(true); placeholders.push(`$${iIdx++}`); }
 
-        await client.query(
+        await pool.query(
           `INSERT INTO products (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
           insertVals
         );
       }
     }
 
-    await client.query('COMMIT');
     res.json({ success: true, count: products.length });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Sync Products Error:', err);
     res.status(500).json({ success: false, error: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -275,24 +245,23 @@ app.post('/api/pos/checkout', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Data transaksi tidak lengkap' });
   }
 
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
     const trxId = 'TRX-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
 
-    await client.query(
+    await pool.query(
       `INSERT INTO transactions (trx_id, company_id, branch_id, cashier_name, total_amount, payment_method, items, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
       [trxId, company_id, branch_id, cashier_name || 'Kasir', total_amount, payment_method || 'CASH', JSON.stringify(items)]
     );
 
-    const pColRes = await client.query(
+    const pColRes = await pool.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
     );
     const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
 
     for (const item of items) {
       const pId = String(item.product_id || item.id).trim();
+      const pName = String(item.name || item.product_name).trim();
       const qty = Number(item.quantity || item.qty || 1);
 
       const updates = [];
@@ -304,38 +273,41 @@ app.post('/api/pos/checkout', async (req, res) => {
       if (pCols.includes('stock')) updates.push(`stock = GREATEST(0, COALESCE(stock, 0) - $1)`);
 
       if (updates.length > 0) {
-        uVals.push(company_id, pId);
-        await client.query(
-          `UPDATE products SET ${updates.join(', ')} 
-           WHERE company_id::VARCHAR = $${idx++} AND (product_id = $${idx++} OR (id IS NOT NULL AND id::VARCHAR = $${idx - 1}))`,
+        uVals.push(company_id);
+        let whereStr = '';
+        if (pCols.includes('product_id')) {
+          whereStr = `company_id::VARCHAR = $${idx++} AND product_id = $${idx++}`;
+          uVals.push(pId);
+        } else {
+          whereStr = `company_id::VARCHAR = $${idx++} AND name = $${idx++}`;
+          uVals.push(pName);
+        }
+
+        await pool.query(
+          `UPDATE products SET ${updates.join(', ')} WHERE ${whereStr}`,
           uVals
         );
       }
     }
 
-    await client.query('COMMIT');
     res.json({ success: true, trx_id: trxId });
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error('Checkout Error:', err);
     res.status(500).json({ success: false, error: err.message });
-  } finally {
-    client.release();
   }
 });
 
 // 4. PULL DATA KE GOOGLE SPREADSHEET
 app.get('/api/sync/pull/:companyId', async (req, res) => {
   const { companyId } = req.params;
-  const client = await pool.connect();
   try {
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]).catch(() => ({ rows: [] }));
+    const branchRes = await pool.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]).catch(() => ({ rows: [] }));
     const branchMap = {};
     (branchRes.rows || []).forEach(b => {
       branchMap[b.branch_id] = b.branch_name || b.name || b.branch_id;
     });
 
-    const trxRes = await client.query(
+    const trxRes = await pool.query(
       `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
        FROM transactions
        WHERE company_id::VARCHAR = $1
@@ -343,7 +315,7 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
       [companyId]
     );
 
-    const prodRes = await client.query(
+    const prodRes = await pool.query(
       `SELECT * FROM products WHERE company_id::VARCHAR = $1`,
       [companyId]
     );
@@ -369,28 +341,26 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
   } catch (err) {
     console.error('Pull Sync Error:', err);
     res.status(500).json({ success: false, error: err.message });
-  } finally {
-    client.release();
   }
 });
 
 // 5. DASHBOARD ANALYTICS
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
-  const client = await pool.connect();
   try {
-    await ensureCompanyAndBranch(client, companyId);
+    await runMigration();
+    await ensureCompanyAndBranch(companyId);
 
-    const compRes = await client.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]);
-    const trxRes = await client.query(
+    const compRes = await pool.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
+    const branchRes = await pool.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]);
+    const trxRes = await pool.query(
       `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
        FROM transactions
        WHERE company_id::VARCHAR = $1
        ORDER BY created_at DESC`,
       [companyId]
     );
-    const prodRes = await client.query(
+    const prodRes = await pool.query(
       `SELECT * FROM products WHERE company_id::VARCHAR = $1`,
       [companyId]
     );
@@ -432,8 +402,6 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   } catch (err) {
     console.error('Dashboard Error:', err);
     res.status(500).json({ success: false, error: err.message });
-  } finally {
-    client.release();
   }
 });
 
