@@ -41,7 +41,7 @@
             <h1 class="text-base font-bold text-white tracking-tight">VANGUARD POS</h1>
             <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ONLINE CLOUD</span>
           </div>
-          <p class="text-xs text-slate-400">VARDHANA NIRWANA · Point of Sale</p>
+          <p class="text-xs text-slate-400">VARDHANA NIRWANA · Multi-Branch Ready</p>
         </div>
       </div>
 
@@ -50,7 +50,7 @@
         <!-- Pilihan Cabang Aktif -->
         <div class="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5">
           <span class="text-xs text-slate-400 mr-2">🏢 Cabang:</span>
-          <select id="branchSelect" onchange="switchBranch()" class="bg-transparent text-xs font-bold text-emerald-400 outline-none cursor-pointer">
+          <select id="branchSelect" class="bg-transparent text-xs font-bold text-emerald-400 outline-none cursor-pointer">
             <option value="Kantor Pusat Bandung" class="bg-slate-900 text-white">Kantor Pusat Bandung</option>
             <option value="Summarecon" class="bg-slate-900 text-white">Summarecon</option>
             <option value="Rancaekek" class="bg-slate-900 text-white">Rancaekek</option>
@@ -73,13 +73,13 @@
     </div>
   </header>
 
-  <!-- WORKSPACE UTAMA KASIR (GRID DUA SISI) -->
+  <!-- WORKSPACE UTAMA KASIR -->
   <main class="max-w-7xl mx-auto px-4 py-4 w-full flex-1 grid grid-cols-1 lg:grid-cols-12 gap-5">
     
-    <!-- SISI KIRI: KATALOG MENU & PENCARIAN (8 KOLOM) -->
+    <!-- SISI KIRI: KATALOG MENU & PENCARIAN -->
     <section class="lg:col-span-7 xl:col-span-8 flex flex-col space-y-4">
       
-      <!-- Filter Bar: Search & Category Pills -->
+      <!-- Filter Bar: Search & Category Pills (100% DINAMIS) -->
       <div class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row gap-3 items-center justify-between">
         <!-- Input Search -->
         <div class="relative w-full sm:w-72">
@@ -87,12 +87,9 @@
           <input type="text" id="searchInput" oninput="filterProducts()" placeholder="Cari nama produk / kode..." class="w-full pl-9 pr-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
         </div>
 
-        <!-- Kategori Filter -->
-        <div class="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
+        <!-- Wadah Kategori Dinamis -->
+        <div id="categoryContainer" class="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
           <button onclick="setCategory('ALL')" class="cat-pill active px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white transition-all">Semua</button>
-          <button onclick="setCategory('Kopi')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition-all">Kopi</button>
-          <button onclick="setCategory('Non-Kopi')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition-all">Minuman</button>
-          <button onclick="setCategory('Makanan')" class="cat-pill px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 text-slate-400 hover:text-white transition-all">Makanan</button>
         </div>
       </div>
 
@@ -102,11 +99,9 @@
       </div>
     </section>
 
-    <!-- SISI KANAN: KERANJANG PESANAN & CHECKOUT (4 KOLOM) -->
+    <!-- SISI KANAN: KERANJANG PESANAN & CHECKOUT -->
     <section class="lg:col-span-5 xl:col-span-4 bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between shadow-xl">
-      
       <div>
-        <!-- Judul Keranjang & Tombol Kosongkan -->
         <div class="flex items-center justify-between pb-3 border-b border-slate-800">
           <div class="flex items-center space-x-2">
             <span class="text-base">🛒</span>
@@ -116,12 +111,10 @@
           <button onclick="clearCart()" class="text-xs text-rose-400 hover:underline">Kosongkan</button>
         </div>
 
-        <!-- Nama Pelanggan -->
         <div class="mt-3">
           <input type="text" id="customerNameInput" placeholder="Nama Pelanggan (opsional / umum)" class="w-full px-3 py-2 bg-slate-800/80 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500">
         </div>
 
-        <!-- Daftar Item di Keranjang -->
         <div id="cartItemList" class="mt-3 space-y-2 overflow-y-auto max-h-[320px] pr-1 divide-y divide-slate-800/60">
           <div class="py-12 text-center text-slate-500 text-xs">
             Keranjang masih kosong.<br>Klik produk di sebelah kiri untuk memesan.
@@ -135,10 +128,6 @@
           <div class="flex justify-between">
             <span>Subtotal</span>
             <span id="cartSubtotalText" class="font-bold text-slate-200">Rp 0</span>
-          </div>
-          <div class="flex justify-between">
-            <span>Diskon</span>
-            <span class="text-emerald-400">Rp 0</span>
           </div>
           <div class="flex justify-between text-sm font-bold text-white pt-1 border-t border-slate-800">
             <span>Total Tagihan</span>
@@ -156,13 +145,12 @@
           </button>
         </div>
 
-        <!-- Kalkulator Tunai (Uang Pas & Kembalian) -->
+        <!-- Kalkulator Tunai -->
         <div id="cashCalculator" class="bg-slate-800/50 p-3 rounded-xl border border-slate-800 space-y-2">
           <div class="flex items-center justify-between text-xs">
             <span class="text-slate-400">Nominal Uang:</span>
             <input type="number" id="cashReceivedInput" oninput="calculateChange()" placeholder="Rp 0" class="w-32 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-right font-bold text-white text-xs focus:outline-none focus:border-emerald-500">
           </div>
-          <!-- Tombol Uang Cepat -->
           <div class="grid grid-cols-4 gap-1">
             <button onclick="setExactCash()" class="py-1 bg-slate-700/60 hover:bg-slate-700 text-[10px] rounded font-bold text-slate-200">Uang Pas</button>
             <button onclick="addCash(20000)" class="py-1 bg-slate-700/60 hover:bg-slate-700 text-[10px] rounded font-bold text-slate-200">+20rb</button>
@@ -175,23 +163,21 @@
           </div>
         </div>
 
-        <!-- Tombol Checkout -->
         <button id="btnCheckout" onclick="processCheckout()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold rounded-xl text-sm transition-all shadow-lg shadow-emerald-600/30 flex items-center justify-center space-x-2">
           <span>🚀 Bayar & Cetak Nota</span>
         </button>
       </div>
-
     </section>
 
   </main>
 
-  <!-- MODAL: KELOLA PRODUK & TAMBAH STOK MASUK -->
+  <!-- MODAL: KELOLA PRODUK & STOK MASUK -->
   <div id="productModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-6 max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <div>
           <h3 class="text-base font-bold text-white">📦 Kelola Menu & Stok Masuk (Restock)</h3>
-          <p class="text-xs text-slate-400">Klien dapat menambah menu baru atau menambah stok masuk secara mandiri</p>
+          <p class="text-xs text-slate-400">Tambah menu langsung di sini atau sinkronkan via Google Sheets (Tab PRODUCTS)</p>
         </div>
         <button onclick="closeProductModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
@@ -202,35 +188,33 @@
         <div class="grid grid-cols-2 gap-3 text-xs">
           <div>
             <label class="block text-slate-400 mb-1">Kode Produk (SKU)</label>
-            <input type="text" id="mProdCode" placeholder="Misal: KOP-01" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
+            <input type="text" id="mProdCode" placeholder="Misal: BRG-01" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
           <div>
             <label class="block text-slate-400 mb-1">Nama Produk</label>
-            <input type="text" id="mProdName" placeholder="Misal: Kopi Latte 250ml" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
+            <input type="text" id="mProdName" placeholder="Misal: Kemeja Polos" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
           <div>
-            <label class="block text-slate-400 mb-1">Kategori</label>
-            <select id="mProdCategory" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
-              <option value="Kopi">Kopi</option>
-              <option value="Non-Kopi">Non-Kopi / Minuman</option>
-              <option value="Makanan">Makanan / Snack</option>
-              <option value="Lainnya">Lainnya</option>
-            </select>
+            <label class="block text-slate-400 mb-1">Kategori (Bebas Diisi)</label>
+            <input type="text" id="mProdCategory" placeholder="Misal: Pakaian, Makanan, Jasa..." required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
           <div>
             <label class="block text-slate-400 mb-1">Harga Jual (IDR)</label>
-            <input type="number" id="mProdPrice" placeholder="25000" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
+            <input type="number" id="mProdPrice" placeholder="50000" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
           <div>
             <label class="block text-slate-400 mb-1">Harga Modal / Beli (IDR)</label>
-            <input type="number" id="mProdCost" placeholder="15000" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
+            <input type="number" id="mProdCost" placeholder="30000" class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
           <div>
             <label class="block text-slate-400 mb-1">Tambah Stok Masuk (+Qty)</label>
             <input type="number" id="mProdStockIn" placeholder="50" required class="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white">
           </div>
         </div>
-        <div class="flex justify-end pt-2">
+        <div class="flex justify-between items-center pt-2">
+          <button type="button" onclick="resetAllProductsToZero()" class="text-xs text-rose-400 hover:underline">
+            🧹 Kosongkan Semua Produk
+          </button>
           <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg transition-all shadow-md">
             Simpan Produk & Stok
           </button>
@@ -246,6 +230,7 @@
               <tr>
                 <th class="py-2.5 px-3">Kode</th>
                 <th class="py-2.5 px-3">Nama</th>
+                <th class="py-2.5 px-3">Kategori</th>
                 <th class="py-2.5 px-3 text-center">Stok Masuk</th>
                 <th class="py-2.5 px-3 text-center">Terjual</th>
                 <th class="py-2.5 px-3 text-center">Sisa Stok</th>
@@ -262,11 +247,11 @@
     </div>
   </div>
 
-  <!-- AREA PRINT STRUK NOTA KASIR (THERMAL RECEIPT) -->
+  <!-- AREA PRINT STRUK NOTA KASIR -->
   <div id="receiptPrintArea" class="hidden">
     <div style="text-align: center; border-bottom: 1px dashed #000; padding-bottom: 8px; margin-bottom: 8px;">
       <h2 style="margin: 0; font-size: 16px; font-weight: bold;">VARDHANA NIRWANA</h2>
-      <p style="margin: 2px 0; font-size: 11px;" id="receiptBranchText">Cabang Bandung</p>
+      <p style="margin: 2px 0; font-size: 11px;" id="receiptBranchText">Cabang</p>
       <p style="margin: 0; font-size: 10px;" id="receiptMetaText">No: TRX-0000 · 2026-10-05</p>
     </div>
     <div id="receiptItemList" style="font-size: 11px; margin-bottom: 8px;"></div>
@@ -295,17 +280,16 @@
     let cart = [];
     let activeCategory = 'ALL';
     let paymentMethod = 'CASH';
-    let cashReceived = 0;
 
     const formatIdr = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
 
-    // Ambil Data Produk & Stok dari Server
     async function fetchProducts() {
       try {
         const res = await fetch(`/api/pos/products/${TENANT_ID}`);
         const data = await res.json();
-        if (data.success && data.products) {
-          products = data.products;
+        if (data.success) {
+          products = data.products || [];
+          renderCategoryPills();
           renderProductGrid();
           renderStockTable();
         }
@@ -314,18 +298,49 @@
       }
     }
 
+    // RENDER TOMBOL KATEGORI SECARA 100% DINAMIS
+    function renderCategoryPills() {
+      const catSet = new Set();
+      products.forEach(p => {
+        if (p.category && p.category.trim()) catSet.add(p.category.trim());
+      });
+
+      const container = document.getElementById('categoryContainer');
+      let html = `<button onclick="setCategory('ALL')" class="cat-pill ${activeCategory === 'ALL' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">Semua</button>`;
+
+      catSet.forEach(cat => {
+        const isActive = activeCategory === cat;
+        html += `<button onclick="setCategory('${cat}')" class="cat-pill ${isActive ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-white'} px-3 py-1.5 rounded-lg text-xs font-semibold transition-all">${cat}</button>`;
+      });
+
+      container.innerHTML = html;
+    }
+
     function renderProductGrid() {
       const container = document.getElementById('productGrid');
       const search = document.getElementById('searchInput').value.toLowerCase();
       
       const filtered = products.filter(p => {
         const matchCat = (activeCategory === 'ALL' || p.category === activeCategory);
-        const matchSearch = p.product_name.toLowerCase().includes(search) || p.product_code.toLowerCase().includes(search);
+        const matchSearch = (p.product_name || '').toLowerCase().includes(search) || (p.product_code || '').toLowerCase().includes(search);
         return matchCat && matchSearch;
       });
 
       if (filtered.length === 0) {
-        container.innerHTML = '<div class="col-span-full py-12 text-center text-slate-500 text-xs">Produk tidak ditemukan.</div>';
+        if (products.length === 0) {
+          container.innerHTML = `
+            <div class="col-span-full py-16 text-center text-slate-400 text-xs bg-slate-900/50 rounded-2xl border border-slate-800/80 p-6 space-y-3">
+              <span class="text-3xl block">📦</span>
+              <p class="font-bold text-white text-sm">Belum Ada Produk Terdaftar</p>
+              <p class="max-w-md mx-auto text-slate-400">
+                Silakan isi data barang di Google Spreadsheet pada tab <b>PRODUCTS</b> lalu lakukan Sync, 
+                atau klik tombol <b>"📦 Stok & Tambah Menu"</b> di kanan atas untuk menambah produk secara manual.
+              </p>
+            </div>
+          `;
+        } else {
+          container.innerHTML = '<div class="col-span-full py-12 text-center text-slate-500 text-xs">Produk dengan kata kunci tersebut tidak ditemukan.</div>';
+        }
         return;
       }
 
@@ -343,7 +358,7 @@
                 <span class="text-[10px] text-slate-400 font-mono">${p.product_code}</span>
               </div>
               <h3 class="text-xs font-bold text-white line-clamp-2">${p.product_name}</h3>
-              <p class="text-[10px] text-slate-400 mt-0.5">${p.category || 'Item'}</p>
+              <p class="text-[10px] text-slate-400 mt-0.5">${p.category || 'Umum'}</p>
             </div>
             <div class="mt-3 flex items-center justify-between">
               <span class="text-xs font-black text-emerald-400">${formatIdr(p.price)}</span>
@@ -445,11 +460,7 @@
 
     function setCategory(cat) {
       activeCategory = cat;
-      document.querySelectorAll('.cat-pill').forEach(btn => {
-        btn.classList.toggle('bg-blue-600', btn.innerText.includes(cat) || (cat === 'ALL' && btn.innerText === 'Semua'));
-        btn.classList.toggle('text-white', btn.innerText.includes(cat) || (cat === 'ALL' && btn.innerText === 'Semua'));
-        btn.classList.toggle('bg-slate-800', !btn.innerText.includes(cat) && !(cat === 'ALL' && btn.innerText === 'Semua'));
-      });
+      renderCategoryPills();
       renderProductGrid();
     }
 
@@ -502,7 +513,6 @@
       }
     }
 
-    // PROSES CHECKOUT TRANSAKSI
     async function processCheckout() {
       if (cart.length === 0) return;
       const branch = document.getElementById('branchSelect').value;
@@ -537,10 +547,8 @@
         const result = await res.json();
         if (!result.success) throw new Error(result.message);
 
-        // Cetak Struk Nota
         printReceipt(result.trx_id || 'TRX-' + Date.now().toString().slice(-4), branch, custName, totalPrice, cashVal);
 
-        // Reset Keranjang & Refresh Data
         cart = [];
         document.getElementById('cashReceivedInput').value = '';
         renderCart();
@@ -575,7 +583,6 @@
       window.print();
     }
 
-    // MODAL MANAJEMEN PRODUK & STOK MASUK
     function openProductModal() {
       document.getElementById('productModal').classList.remove('hidden');
     }
@@ -587,7 +594,7 @@
       e.preventDefault();
       const code = document.getElementById('mProdCode').value.trim();
       const name = document.getElementById('mProdName').value.trim();
-      const cat = document.getElementById('mProdCategory').value;
+      const cat = document.getElementById('mProdCategory').value.trim();
       const price = Number(document.getElementById('mProdPrice').value);
       const cost = Number(document.getElementById('mProdCost').value || 0);
       const stockIn = Number(document.getElementById('mProdStockIn').value || 0);
@@ -617,22 +624,39 @@
       }
     }
 
+    async function resetAllProductsToZero() {
+      if (!confirm('Apakah Anda yakin ingin MENGHAPUS SEMUA PRODUK dari kasir menjadi NOL?')) return;
+      try {
+        const res = await fetch('/api/pos/reset-products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ company_id: TENANT_ID })
+        });
+        const d = await res.json();
+        alert(d.message || 'Semua produk telah dikosongkan!');
+        await fetchProducts();
+      } catch (err) {
+        alert('Gagal reset produk: ' + err.message);
+      }
+    }
+
     function renderStockTable() {
       const tbody = document.getElementById('stockSummaryTable');
+      if (products.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-500">Belum ada produk terdaftar.</td></tr>';
+        return;
+      }
       tbody.innerHTML = products.map(p => `
         <tr class="hover:bg-slate-800/40">
           <td class="py-2 px-3 font-mono text-slate-400">${p.product_code}</td>
           <td class="py-2 px-3 font-bold text-white">${p.product_name}</td>
+          <td class="py-2 px-3 text-slate-300">${p.category || '-'}</td>
           <td class="py-2 px-3 text-center text-blue-400 font-bold">${p.stock_in}</td>
           <td class="py-2 px-3 text-center text-rose-400 font-bold">${p.stock_sold}</td>
           <td class="py-2 px-3 text-center font-black ${p.current_stock <= 5 ? 'text-amber-400' : 'text-emerald-400'}">${p.current_stock}</td>
           <td class="py-2 px-3 text-right font-bold text-slate-200">${formatIdr(p.price)}</td>
         </tr>
       `).join('');
-    }
-
-    function switchBranch() {
-      // Cabang tersimpan di header pos
     }
 
     fetchProducts();
