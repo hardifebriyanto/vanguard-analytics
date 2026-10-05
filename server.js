@@ -17,28 +17,23 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Auto-Migration & Perbaikan Indeks Database
+// Auto-Migration Kolom Profil
 async function initDb() {
   const client = await pool.connect();
   try {
-    // 1. Tambah kolom profil jika belum ada
     await client.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS address TEXT;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS email VARCHAR(100);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(50);
-    `);
 
-    // 2. Bersihkan COMP-002 sesuai permintaan
-    await client.query(`
       DELETE FROM sales WHERE company_id = 'COMP-002';
       DELETE FROM modules WHERE company_id = 'COMP-002';
       DELETE FROM branches WHERE company_id = 'COMP-002';
       DELETE FROM companies WHERE company_id = 'COMP-002';
     `);
-
-    console.log('✅ DB Siap: Migrasi kolom profil & pembersihan selesai.');
+    console.log('✅ DB Siap: COMP-002 dibersihkan & profil aktif.');
   } catch (err) {
     console.warn('DB Init Log:', err.message);
   } finally {
@@ -47,7 +42,7 @@ async function initDb() {
 }
 initDb();
 
-// Helper Verifikasi API Key
+// Cek Kunci API Keamanan Fleksibel
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -66,7 +61,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. Sync Master Config (Profil Perusahaan, Logo, Modul & Cabang) - METODE KEBAL CONSTRAINT
+// 2. Sync Master Config (SELECT 1 Universal - Anti Error Kolom ID)
 app.post('/api/sync/config', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -87,7 +82,7 @@ app.post('/api/sync/config', async (req, res) => {
       const email = company.email || '';
       const status = company.status || 'ACTIVE';
 
-      const checkComp = await client.query('SELECT id FROM companies WHERE company_id = $1', [compId]);
+      const checkComp = await client.query('SELECT 1 FROM companies WHERE company_id = $1', [compId]);
       if (checkComp.rows.length > 0) {
         await client.query(`
           UPDATE companies
@@ -113,7 +108,7 @@ app.post('/api/sync/config', async (req, res) => {
           String(m.is_enabled).trim().toUpperCase() === 'AKTIF'
         );
 
-        const checkMod = await client.query('SELECT id FROM modules WHERE company_id = $1 AND module_code = $2', [m.company_id, m.module_code]);
+        const checkMod = await client.query('SELECT 1 FROM modules WHERE company_id = $1 AND module_code = $2', [m.company_id, m.module_code]);
         if (checkMod.rows.length > 0) {
           await client.query(`
             UPDATE modules
@@ -132,7 +127,7 @@ app.post('/api/sync/config', async (req, res) => {
     // C. Simpan Cabang (Multi-Cabang)
     if (branches && Array.isArray(branches)) {
       for (const b of branches) {
-        const checkBr = await client.query('SELECT id FROM branches WHERE company_id = $1 AND branch_code = $2', [b.company_id, b.branch_code]);
+        const checkBr = await client.query('SELECT 1 FROM branches WHERE company_id = $1 AND branch_code = $2', [b.company_id, b.branch_code]);
         if (checkBr.rows.length > 0) {
           await client.query(`
             UPDATE branches
@@ -173,7 +168,7 @@ app.post('/api/sync/import', async (req, res) => {
     }
 
     for (const t of transactions) {
-      const checkSale = await client.query('SELECT id FROM sales WHERE company_id = $1 AND trx_id = $2', [targetCompId, t.trx_id]);
+      const checkSale = await client.query('SELECT 1 FROM sales WHERE company_id = $1 AND trx_id = $2', [targetCompId, t.trx_id]);
       if (checkSale.rows.length > 0) {
         await client.query(`
           UPDATE sales
@@ -206,7 +201,7 @@ app.post('/api/sync/import', async (req, res) => {
   }
 });
 
-// 4. Dashboard Data API (Mendukung Filter Cabang & Konsolidasi)
+// 4. Dashboard Data API
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const branch = req.query.branch || '';
@@ -221,11 +216,11 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       logo_url: '' 
     };
 
-    const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1 ORDER BY id ASC', [companyId]);
+    const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1 ORDER BY module_code ASC', [companyId]);
     const branchRes = await client.query('SELECT branch_code, branch_name, city FROM branches WHERE company_id = $1 ORDER BY branch_code ASC', [companyId]);
 
-    // KPI Sales
-    let kpiSql = `SELECT COALESCE(SUM(total_amount), 0) as total_revenue, COUNT(id) as total_trx, COALESCE(SUM(qty), 0) as total_qty FROM sales WHERE company_id = $1`;
+    // KPI Sales Universal COUNT(*)
+    let kpiSql = `SELECT COALESCE(SUM(total_amount), 0) as total_revenue, COUNT(*) as total_trx, COALESCE(SUM(qty), 0) as total_qty FROM sales WHERE company_id = $1`;
     const kpiParams = [companyId];
     if (branch) { kpiSql += ` AND branch_code = $2`; kpiParams.push(branch); }
     const kpiRes = await client.query(kpiSql, kpiParams);
@@ -233,7 +228,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     // Kinerja Tiap Cabang
     const branchPerf = await client.query(`
       SELECT s.branch_code, COALESCE(b.branch_name, s.branch_code) as branch_name, COALESCE(b.city, '-') as city,
-             COALESCE(SUM(s.total_amount), 0) as total_revenue, COUNT(s.id) as total_trx
+             COALESCE(SUM(s.total_amount), 0) as total_revenue, COUNT(*) as total_trx
       FROM sales s
       LEFT JOIN branches b ON s.branch_code = b.branch_code AND s.company_id = b.company_id
       WHERE s.company_id = $1
@@ -265,7 +260,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     `;
     const trxParams = [companyId];
     if (branch) { trxSql += ` AND s.branch_code = $2`; trxParams.push(branch); }
-    trxSql += ` ORDER BY s.trx_date DESC, s.id DESC LIMIT 10`;
+    trxSql += ` ORDER BY s.trx_date DESC, s.trx_id DESC LIMIT 10`;
     const trxRes = await client.query(trxSql, trxParams);
 
     res.json({
@@ -300,7 +295,6 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   }
 });
 
-// Root Route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
