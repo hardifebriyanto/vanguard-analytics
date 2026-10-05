@@ -5,60 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vanguard POS — Kasir Modern Multi-Cabang</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    /* OPTIMASI KHUSUS PRINTER THERMAL KASIR: 1 LEMBAR PAS */
-    @media print {
-      @page {
-        size: 58mm auto;
-        margin: 0mm;
-      }
-      html, body {
-        width: 58mm !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        background: #fff !important;
-        color: #000 !important;
-        height: auto !important;
-        overflow: visible !important;
-      }
-      /* Sembunyikan semua elemen kecuali struk */
-      header, main, #productModal, .no-print {
-        display: none !important;
-      }
-      #receiptModal {
-        position: static !important;
-        display: block !important;
-        background: #fff !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        width: 58mm !important;
-        inset: auto !important;
-      }
-      #receiptModal > div {
-        border: none !important;
-        box-shadow: none !important;
-        background: #fff !important;
-        padding: 0 !important;
-        margin: 0 !important;
-        max-width: 58mm !important;
-        width: 58mm !important;
-      }
-      #thermalReceipt {
-        width: 58mm !important;
-        max-width: 58mm !important;
-        margin: 0 !important;
-        padding: 3mm 2mm !important;
-        border: none !important;
-        box-shadow: none !important;
-        font-family: 'Courier New', Courier, monospace !important;
-        font-size: 10px !important;
-        line-height: 1.25 !important;
-        page-break-after: avoid !important;
-        page-break-before: avoid !important;
-        page-break-inside: avoid !important;
-      }
-    }
-  </style>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white">
 
@@ -195,12 +141,12 @@
 
   </main>
 
-  <!-- MODAL: STRUK NOTA KASIR (1 LEMBAR PAS 58mm) -->
+  <!-- MODAL STRUK DI LAYAR (PREVIEW & CETAK) -->
   <div id="receiptModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col items-center">
       
-      <!-- KERTAS STRUK THERMAL 58mm -->
-      <div id="thermalReceipt" class="w-full bg-white text-black p-4 rounded-md font-mono text-[11px] leading-tight shadow-md border border-slate-200 space-y-2">
+      <!-- KERTAS STRUK THERMAL PREVIEW DI LAYAR -->
+      <div class="w-full bg-white text-black p-4 rounded-md font-mono text-[11px] leading-tight shadow-md border border-slate-200 space-y-2">
         <div class="text-center border-b border-dashed border-black pb-2">
           <h2 class="font-black text-xs uppercase tracking-wider text-black">VARDHANA NIRWANA</h2>
           <p class="text-[10px] text-gray-800" id="recOutlet">Outlet Cabang</p>
@@ -231,10 +177,10 @@
         </div>
       </div>
 
-      <!-- ALAT AKSI CETAK & WHATSAPP -->
-      <div class="w-full mt-4 space-y-2 no-print">
-        <button onclick="window.print()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-1.5">
-          <span>🖨️ Cetak Struk 1 Lembar</span>
+      <!-- TOMBOL AKSI CETAK 1 LEMBAR & WHATSAPP -->
+      <div class="w-full mt-4 space-y-2">
+        <button onclick="printThermalReceiptExact()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-1.5">
+          <span>🖨️ Cetak Struk (Pasti 1 Lembar)</span>
         </button>
 
         <div class="flex space-x-2">
@@ -263,7 +209,6 @@
         <button onclick="closeProductModal()" class="text-slate-400 hover:text-white text-lg">✕</button>
       </div>
 
-      <!-- Form Tambah Produk -->
       <form id="newProductForm" onsubmit="handleSaveProduct(event)" class="bg-slate-800/40 border border-slate-700/70 p-4 rounded-xl space-y-3">
         <h4 class="text-xs font-bold text-emerald-400 uppercase tracking-wider">➕ Tambah / Perbarui Produk</h4>
         <div class="grid grid-cols-2 gap-3 text-xs">
@@ -299,7 +244,6 @@
         </div>
       </form>
 
-      <!-- Tabel Stok -->
       <div>
         <h4 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-2">Daftar Stok Produk Saat Ini</h4>
         <div class="overflow-x-auto border border-slate-800 rounded-xl">
@@ -642,6 +586,111 @@
 
     function closeReceiptModal() {
       document.getElementById('receiptModal').classList.add('hidden');
+    }
+
+    // TEKNOLOGI CETAK IFRAME TERISOLASI: DIJAMIN 100% PASTI 1 LEMBAR PAS 58mm
+    function printThermalReceiptExact() {
+      if (!lastCompletedTrx) return;
+      const trx = lastCompletedTrx;
+
+      let iframe = document.getElementById('receiptIframe');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'receiptIframe';
+        iframe.style.position = 'fixed';
+        iframe.style.right = '0';
+        iframe.style.bottom = '0';
+        iframe.style.width = '0px';
+        iframe.style.height = '0px';
+        iframe.style.border = 'none';
+        document.body.appendChild(iframe);
+      }
+
+      const itemsHtml = trx.items.map(i => `
+        <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+          <span>${i.product_name} x${i.qty}</span>
+          <span>${formatIdr(i.price * i.qty)}</span>
+        </div>
+      `).join('');
+
+      const doc = iframe.contentWindow.document;
+      doc.open();
+      doc.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <title>Struk - ${trx.trx_id}</title>
+          <style>
+            @page {
+              size: 58mm auto;
+              margin: 0;
+            }
+            html, body {
+              width: 58mm;
+              margin: 0;
+              padding: 0;
+              background: #fff;
+              color: #000;
+              font-family: 'Courier New', Courier, monospace;
+              font-size: 11px;
+              line-height: 1.25;
+            }
+            .receipt-box {
+              width: 58mm;
+              max-width: 58mm;
+              padding: 4mm 3mm;
+              box-sizing: border-box;
+            }
+            .text-center { text-align: center; }
+            .bold { font-weight: bold; }
+            .dashed { border-top: 1px dashed #000; margin: 5px 0; }
+            .row { display: flex; justify-content: space-between; }
+          </style>
+        </head>
+        <body>
+          <div class="receipt-box">
+            <div class="text-center">
+              <div class="bold" style="font-size: 12px; letter-spacing: 0.5px;">VARDHANA NIRWANA</div>
+              <div style="font-size: 10px;">Outlet: ${trx.branch}</div>
+              <div style="font-size: 9px; color: #444;">${trx.date}</div>
+              <div style="font-size: 9px; font-weight: bold;">No: ${trx.trx_id}</div>
+            </div>
+            
+            <div class="dashed"></div>
+            
+            <div>${itemsHtml}</div>
+            
+            <div class="dashed"></div>
+            
+            <div class="row bold">
+              <span>TOTAL:</span>
+              <span>${formatIdr(trx.total)}</span>
+            </div>
+            <div class="row" style="font-size: 10px;">
+              <span>Bayar (${trx.method}):</span>
+              <span>${formatIdr(trx.paid)}</span>
+            </div>
+            <div class="row bold" style="font-size: 10px;">
+              <span>Kembali:</span>
+              <span>${formatIdr(trx.change)}</span>
+            </div>
+            
+            <div class="dashed"></div>
+            
+            <div class="text-center" style="font-size: 9px; margin-top: 5px;">
+              Terima Kasih Atas Kunjungan Anda!<br>
+              Powered by Vanguard POS
+            </div>
+          </div>
+        </body>
+        </html>
+      `);
+      doc.close();
+
+      setTimeout(() => {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      }, 250);
     }
 
     function shareToWhatsApp() {
