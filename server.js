@@ -15,7 +15,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// KONEKSI DATABASE NEON CLOUD (FAST POOLING)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_u3R7sCfltVvd@ep-dry-frog-a10j192k-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
   ssl: { rejectUnauthorized: false },
@@ -24,13 +23,34 @@ const pool = new Pool({
   connectionTimeoutMillis: 5000
 });
 
-// 1. ENDPOINT SYNC KHUSUS PRODUK (OTOMATIS MEMBUAT TABEL PRODUCTS JIKA BELUM ADA)
+// 1. ENDPOINT TARIK DATA TRANSAKSI & STOK KE SPREADSHEET (PULL DATA)
+app.get('/api/sync/pull/:companyId', async (req, res) => {
+  const { companyId } = req.params;
+  try {
+    const trxRes = await pool.query(
+      'SELECT id, trx_id, trx_date, customer_name, product_name, qty, total_amount, branch_name, created_at FROM sales_transactions WHERE company_id = $1 ORDER BY id DESC LIMIT 500',
+      [companyId]
+    );
+    const prodRes = await pool.query(
+      'SELECT product_code, product_name, category, price, cost_price, stock_in, stock_sold, current_stock FROM products WHERE company_id = $1 ORDER BY id ASC',
+      [companyId]
+    );
+    res.json({
+      success: true,
+      transactions: trxRes.rows,
+      products: prodRes.rows
+    });
+  } catch (err) {
+    res.json({ success: false, message: err.message });
+  }
+});
+
+// 2. ENDPOINT SYNC PRODUK DARI SPREADSHEET
 app.post('/api/pos/sync-products', async (req, res) => {
   try {
     const { company_id = 'COMP-001', products = [] } = req.body;
-    if (!products.length) return res.json({ success: false, message: 'Tidak ada data produk yang dikirim.' });
+    if (!products.length) return res.json({ success: false, message: 'Data produk kosong.' });
 
-    // OTOMATIS BUAT TABEL PRODUCTS JIKA BELUM TERSEDIA
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
@@ -49,14 +69,12 @@ app.post('/api/pos/sync-products', async (req, res) => {
       )
     `);
 
-    // PROSES SETIAP PRODUK DARI GOOGLE SPREADSHEET
     for (const p of products) {
       if (!p.product_code || !p.product_name) continue;
       const stockIn = Number(p.stock_in || 0);
       const price = Number(p.price || 0);
       const costPrice = Number(p.cost_price || 0);
 
-      // Coba UPDATE jika produk sudah ada
       const up = await pool.query(`
         UPDATE products 
         SET product_name = $1, category = $2, price = $3, cost_price = $4, 
@@ -64,7 +82,6 @@ app.post('/api/pos/sync-products', async (req, res) => {
         WHERE company_id = $6 AND product_code = $7
       `, [p.product_name, p.category || 'Umum', price, costPrice, stockIn, company_id, p.product_code]);
 
-      // Jika belum ada, lakukan INSERT produk baru
       if (up.rowCount === 0) {
         await pool.query(`
           INSERT INTO products (company_id, product_code, product_name, category, price, cost_price, stock_in, current_stock, unit, updated_at)
@@ -73,56 +90,19 @@ app.post('/api/pos/sync-products', async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: `Berhasil sinkronisasi ${products.length} produk ke Kasir Cloud!` });
+    res.json({ success: true, message: `Berhasil sinkron ${products.length} produk ke Kasir Cloud!` });
   } catch (err) {
     res.json({ success: false, message: 'Gagal sync produk: ' + err.message });
   }
 });
 
-// 2. ENDPOINT SYNC MASTER CONFIG (PERUSAHAAN, CABANG & MODUL)
+// 3. ENDPOINT SYNC MASTER CONFIG
 app.post('/api/sync/config', async (req, res) => {
   try {
-    const { company, modules, branches, products } = req.body;
+    const { company, modules, branches } = req.body;
     if (!company) return res.json({ success: false, message: 'Data tidak valid' });
 
-    // Pastikan tabel master ada
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS companies (
-        company_id VARCHAR(50) PRIMARY KEY,
-        company_name VARCHAR(255) NOT NULL,
-        plan_tier VARCHAR(50) DEFAULT 'BASIC',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        logo_url TEXT,
-        address TEXT,
-        phone VARCHAR(50),
-        email VARCHAR(100),
-        status VARCHAR(50) DEFAULT 'ACTIVE'
-      )
-    `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS branches (
-        id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL,
-        branch_id VARCHAR(50),
-        branch_code VARCHAR(50) NOT NULL,
-        branch_name VARCHAR(255) NOT NULL,
-        city VARCHAR(100),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS modules (
-        id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL,
-        module_code VARCHAR(50) NOT NULL,
-        module_name VARCHAR(100) NOT NULL,
-        is_enabled BOOLEAN DEFAULT false,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Update Company
+    // Company
     const compUp = await pool.query(`
       UPDATE companies 
       SET company_name = $1, plan_tier = $2, logo_url = $3, address = $4, phone = $5, email = $6, status = $7, updated_at = CURRENT_TIMESTAMP
@@ -136,7 +116,7 @@ app.post('/api/sync/config', async (req, res) => {
       `, [company.company_id, company.company_name, company.plan_tier || 'BASIC', company.logo_url || '', company.address || '', company.phone || '', company.email || '', company.status || 'ACTIVE']);
     }
 
-    // Refresh Cabang
+    // Cabang
     if (branches && branches.length) {
       await pool.query('DELETE FROM branches WHERE company_id = $1', [company.company_id]);
       for (const b of branches) {
@@ -148,7 +128,7 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    // Refresh Modul
+    // Modul
     if (modules && modules.length) {
       await pool.query('DELETE FROM modules WHERE company_id = $1', [company.company_id]);
       for (const m of modules) {
@@ -160,13 +140,13 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    res.json({ success: true, message: 'Seluruh data master berhasil disinkronkan!' });
+    res.json({ success: true, message: 'Data master berhasil disinkronkan!' });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 });
 
-// 3. DAFTAR PRODUK KASIR
+// 4. DAFTAR PRODUK KASIR
 app.get('/api/pos/products/:companyId', async (req, res) => {
   const { companyId } = req.params;
   try {
@@ -180,13 +160,12 @@ app.get('/api/pos/products/:companyId', async (req, res) => {
   }
 });
 
-// 4. CHECKOUT TRANSAKSI KASIR
+// 5. CHECKOUT TRANSAKSI KASIR (POTONG STOK OTOMATIS)
 app.post('/api/pos/checkout', async (req, res) => {
   try {
     const { company_id = 'COMP-001', branch_name, customer_name, payment_method, items } = req.body;
     if (!items || !items.length) return res.json({ success: false, message: 'Item pesanan kosong' });
 
-    // Pastikan tabel transaksi ada
     await pool.query(`
       CREATE TABLE IF NOT EXISTS sales_transactions (
         id SERIAL PRIMARY KEY,
@@ -232,7 +211,7 @@ app.post('/api/pos/checkout', async (req, res) => {
   }
 });
 
-// 5. DASHBOARD DATA
+// 6. DASHBOARD DATA LENGKAP (TERMASUK DATA STOK IN, STOK OUT & SISA STOK)
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const { branch } = req.query;
@@ -297,6 +276,12 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     prodChartQuery += ' GROUP BY product_name ORDER BY sum_qty DESC LIMIT 5';
     const prodChartRes = await pool.query(prodChartQuery, prodParams).catch(() => ({ rows: [] }));
 
+    // DATA STOK UNTUK DASHBOARD VANGUARD
+    const invRes = await pool.query(
+      'SELECT product_code, product_name, category, price, stock_in, stock_sold, current_stock FROM products WHERE company_id = $1 ORDER BY id ASC',
+      [companyId]
+    ).catch(() => ({ rows: [] }));
+
     res.json({
       success: true,
       company,
@@ -304,6 +289,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       modules: moduleRes.rows,
       branchPerformance: perfRes.rows,
       transactions: trxRes.rows,
+      inventory: invRes.rows,
       kpi: {
         totalRevenue: Number(kpiRow.total_revenue || 0),
         totalTrx: Number(kpiRow.total_trx || 0),
@@ -321,7 +307,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   }
 });
 
-// 6. RESET DATA PENJUALAN
+// 7. RESET
 app.post('/api/reset-sales', async (req, res) => {
   const { company_id = 'COMP-001' } = req.body;
   await pool.query('DELETE FROM sales_transactions WHERE company_id = $1', [company_id]).catch(() => {});
