@@ -15,44 +15,87 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Helper: Auto-Register Tenant Baru & Cabang Default
+// Helper 1: Auto-Migrate Database (Mengubah company_id ke VARCHAR & Menambahkan product_id)
+async function autoMigrateDatabase(client) {
+  try {
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        -- Drop foreign key jika ada agar tipe data bisa diubah
+        ALTER TABLE products DROP CONSTRAINT IF EXISTS fk_company CASCADE;
+        ALTER TABLE products DROP CONSTRAINT IF EXISTS products_company_id_fkey CASCADE;
+        ALTER TABLE branches DROP CONSTRAINT IF EXISTS branches_company_id_fkey CASCADE;
+        ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_company_id_fkey CASCADE;
+
+        -- Ubah tipe company_id di companies menjadi VARCHAR
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'companies' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
+        ) THEN
+          ALTER TABLE companies ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
+        END IF;
+
+        -- Ubah tipe company_id di products menjadi VARCHAR
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'products' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
+        ) THEN
+          ALTER TABLE products ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
+        END IF;
+
+        -- Ubah tipe company_id di branches menjadi VARCHAR
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'branches' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
+        ) THEN
+          ALTER TABLE branches ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
+        END IF;
+
+        -- Ubah tipe company_id di transactions menjadi VARCHAR
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns 
+          WHERE table_name = 'transactions' AND column_name = 'company_id' AND data_type IN ('integer', 'smallint', 'bigint')
+        ) THEN
+          ALTER TABLE transactions ALTER COLUMN company_id TYPE VARCHAR(100) USING company_id::VARCHAR;
+        END IF;
+
+        -- Pastikan kolom product_id dan stok ada di tabel products
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS product_id VARCHAR(100);
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold NUMERIC DEFAULT 0;
+        ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock NUMERIC DEFAULT 0;
+      END $$;
+    `);
+  } catch (err) {
+    console.warn('Auto-Migration Notice:', err.message);
+  }
+}
+
+// Helper 2: Auto-Register Tenant Baru & Cabang Default
 async function ensureCompanyAndBranch(client, companyId, companyName = null) {
+  await autoMigrateDatabase(client);
+
   const cleanId = String(companyId || 'COMP-001').trim();
   const displayName = companyName || cleanId;
 
-  // 1. Cek Kolom di tabel companies
-  const colRes = await client.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_name = 'companies'`
-  );
-  const cols = colRes.rows.map(r => r.column_name.toLowerCase());
-
-  // 2. Cek apakah company_id sudah terdaftar
-  const compCheck = await client.query('SELECT company_id FROM companies WHERE company_id = $1', [cleanId]);
+  // 1. Cek / Buat Company
+  const compCheck = await client.query('SELECT company_id FROM companies WHERE company_id::VARCHAR = $1', [cleanId]);
   if (compCheck.rows.length === 0) {
+    const colRes = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'companies'`
+    );
+    const cols = colRes.rows.map(r => r.column_name.toLowerCase());
+
     const insertCols = ['company_id'];
     const insertVals = [cleanId];
     const placeholders = ['$1'];
     let idx = 2;
 
-    if (cols.includes('company_name')) {
-      insertCols.push('company_name');
-      insertVals.push(displayName);
-      placeholders.push(`$${idx++}`);
-    } else if (cols.includes('name')) {
-      insertCols.push('name');
-      insertVals.push(displayName);
-      placeholders.push(`$${idx++}`);
-    }
+    if (cols.includes('company_name')) { insertCols.push('company_name'); insertVals.push(displayName); placeholders.push(`$${idx++}`); }
+    else if (cols.includes('name')) { insertCols.push('name'); insertVals.push(displayName); placeholders.push(`$${idx++}`); }
 
-    if (cols.includes('package_id')) {
-      insertCols.push('package_id');
-      insertVals.push('BASIC');
-      placeholders.push(`$${idx++}`);
-    } else if (cols.includes('plan_tier')) {
-      insertCols.push('plan_tier');
-      insertVals.push('PRO');
-      placeholders.push(`$${idx++}`);
-    }
+    if (cols.includes('package_id')) { insertCols.push('package_id'); insertVals.push('BASIC'); placeholders.push(`$${idx++}`); }
+    else if (cols.includes('plan_tier')) { insertCols.push('plan_tier'); insertVals.push('PRO'); placeholders.push(`$${idx++}`); }
 
     await client.query(
       `INSERT INTO companies (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
@@ -60,29 +103,21 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
     );
   }
 
-  // 3. Cek Kolom di tabel branches
-  const bColRes = await client.query(
-    `SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'`
-  );
-  const bCols = bColRes.rows.map(r => r.column_name.toLowerCase());
-
-  // 4. Cek Cabang Default
-  const branchCheck = await client.query('SELECT branch_id FROM branches WHERE company_id = $1', [cleanId]);
+  // 2. Cek / Buat Cabang Default
+  const branchCheck = await client.query('SELECT branch_id FROM branches WHERE company_id::VARCHAR = $1', [cleanId]);
   if (branchCheck.rows.length === 0) {
+    const bColRes = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'`
+    );
+    const bCols = bColRes.rows.map(r => r.column_name.toLowerCase());
+
     const bColsList = ['branch_id', 'company_id'];
     const bValsList = ['BR-001', cleanId];
     const bPlaceholders = ['$1', '$2'];
     let bIdx = 3;
 
-    if (bCols.includes('branch_name')) {
-      bColsList.push('branch_name');
-      bValsList.push('Cabang Utama');
-      bPlaceholders.push(`$${bIdx++}`);
-    } else if (bCols.includes('name')) {
-      bColsList.push('name');
-      bValsList.push('Cabang Utama');
-      bPlaceholders.push(`$${bIdx++}`);
-    }
+    if (bCols.includes('branch_name')) { bColsList.push('branch_name'); bValsList.push('Cabang Utama'); bPlaceholders.push(`$${bIdx++}`); }
+    else if (bCols.includes('name')) { bColsList.push('name'); bValsList.push('Cabang Utama'); bPlaceholders.push(`$${bIdx++}`); }
 
     await client.query(
       `INSERT INTO branches (${bColsList.join(', ')}) VALUES (${bPlaceholders.join(', ')})`,
@@ -98,10 +133,10 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
   try {
     await ensureCompanyAndBranch(client, companyId);
 
-    const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1 ORDER BY branch_id ASC', [companyId]);
+    const compRes = await client.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1 ORDER BY branch_id ASC', [companyId]);
     const prodRes = await client.query(
-      'SELECT * FROM products WHERE company_id = $1 AND (is_active = true OR is_active IS NULL)',
+      'SELECT * FROM products WHERE company_id::VARCHAR = $1 AND (is_active = true OR is_active IS NULL)',
       [companyId]
     );
 
@@ -112,7 +147,7 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
     }));
 
     const products = prodRes.rows.map(p => ({
-      product_id: p.product_id || p.id || p.sku,
+      product_id: p.product_id || (p.id ? String(p.id) : p.sku),
       name: p.name || p.product_name,
       category: p.category || 'Umum',
       unit_price: Number(p.unit_price !== undefined ? p.unit_price : (p.price || 0)),
@@ -149,22 +184,13 @@ app.post('/api/pos/sync-products', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Pastikan Tenant & Cabang Ada
+    // Pastikan Tenant & Cabang Ada (termasuk migrasi VARCHAR)
     await ensureCompanyAndBranch(client, company_id, company_name);
 
-    // Auto-tambah kolom stok jika belum ada di tabel products
-    await client.query(`
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in NUMERIC DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold NUMERIC DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock NUMERIC DEFAULT 0;
-    `).catch(() => {});
-
-    // Deteksi nama kolom yang sebenarnya di tabel products
     const pColRes = await client.query(
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
     );
     const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
-    const idCol = pCols.includes('product_id') ? 'product_id' : 'id';
     const nameCol = pCols.includes('name') ? 'name' : (pCols.includes('product_name') ? 'product_name' : 'name');
 
     for (const p of products) {
@@ -177,9 +203,9 @@ app.post('/api/pos/sync-products', async (req, res) => {
       let cStock = Number(p.current_stock);
       if (isNaN(cStock)) cStock = sIn - sSold;
 
-      // Cek apakah produk sudah ada di database
+      // Cek apakah produk sudah ada
       const check = await client.query(
-        `SELECT ${idCol} FROM products WHERE company_id = $1 AND ${idCol} = $2`,
+        `SELECT * FROM products WHERE company_id::VARCHAR = $1 AND (product_id = $2 OR (id IS NOT NULL AND id::VARCHAR = $2))`,
         [company_id, pId]
       );
 
@@ -198,20 +224,22 @@ app.post('/api/pos/sync-products', async (req, res) => {
         if (pCols.includes('current_stock')) { setClauses.push(`current_stock = $${uIdx++}`); updateVals.push(cStock); }
         if (pCols.includes('stock')) { setClauses.push(`stock = $${uIdx++}`); updateVals.push(cStock); }
         if (pCols.includes('is_active')) { setClauses.push(`is_active = $${uIdx++}`); updateVals.push(true); }
-        if (pCols.includes('updated_at')) { setClauses.push(`updated_at = NOW()`); }
+        if (pCols.includes('product_id')) { setClauses.push(`product_id = $${uIdx++}`); updateVals.push(pId); }
 
         updateVals.push(company_id, pId);
         await client.query(
-          `UPDATE products SET ${setClauses.join(', ')} WHERE company_id = $${uIdx++} AND ${idCol} = $${uIdx++}`,
+          `UPDATE products SET ${setClauses.join(', ')} 
+           WHERE company_id::VARCHAR = $${uIdx++} AND (product_id = $${uIdx++} OR (id IS NOT NULL AND id::VARCHAR = $${uIdx - 1}))`,
           updateVals
         );
       } else {
         // INSERT
-        const insertCols = [idCol, 'company_id'];
-        const insertVals = [pId, company_id];
-        const placeholders = ['$1', '$2'];
-        let iIdx = 3;
+        const insertCols = ['company_id'];
+        const insertVals = [company_id];
+        const placeholders = ['$1'];
+        let iIdx = 2;
 
+        if (pCols.includes('product_id')) { insertCols.push('product_id'); insertVals.push(pId); placeholders.push(`$${iIdx++}`); }
         if (pCols.includes(nameCol)) { insertCols.push(nameCol); insertVals.push(pName); placeholders.push(`$${iIdx++}`); }
         if (pCols.includes('category')) { insertCols.push('category'); insertVals.push(pCat); placeholders.push(`$${iIdx++}`); }
         if (pCols.includes('unit_price')) { insertCols.push('unit_price'); insertVals.push(pPrice); placeholders.push(`$${iIdx++}`); }
@@ -262,7 +290,6 @@ app.post('/api/pos/checkout', async (req, res) => {
       `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
     );
     const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
-    const idCol = pCols.includes('product_id') ? 'product_id' : 'id';
 
     for (const item of items) {
       const pId = String(item.product_id || item.id).trim();
@@ -275,12 +302,12 @@ app.post('/api/pos/checkout', async (req, res) => {
       if (pCols.includes('stock_sold')) updates.push(`stock_sold = COALESCE(stock_sold, 0) + $1`);
       if (pCols.includes('current_stock')) updates.push(`current_stock = GREATEST(0, COALESCE(current_stock, 0) - $1)`);
       if (pCols.includes('stock')) updates.push(`stock = GREATEST(0, COALESCE(stock, 0) - $1)`);
-      if (pCols.includes('updated_at')) updates.push(`updated_at = NOW()`);
 
       if (updates.length > 0) {
         uVals.push(company_id, pId);
         await client.query(
-          `UPDATE products SET ${updates.join(', ')} WHERE company_id = $${idx++} AND ${idCol} = $${idx++}`,
+          `UPDATE products SET ${updates.join(', ')} 
+           WHERE company_id::VARCHAR = $${idx++} AND (product_id = $${idx++} OR (id IS NOT NULL AND id::VARCHAR = $${idx - 1}))`,
           uVals
         );
       }
@@ -302,7 +329,7 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
   try {
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1', [companyId]).catch(() => ({ rows: [] }));
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]).catch(() => ({ rows: [] }));
     const branchMap = {};
     (branchRes.rows || []).forEach(b => {
       branchMap[b.branch_id] = b.branch_name || b.name || b.branch_id;
@@ -311,13 +338,13 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
     const trxRes = await client.query(
       `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
        FROM transactions
-       WHERE company_id = $1
+       WHERE company_id::VARCHAR = $1
        ORDER BY created_at DESC`,
       [companyId]
     );
 
     const prodRes = await client.query(
-      `SELECT * FROM products WHERE company_id = $1`,
+      `SELECT * FROM products WHERE company_id::VARCHAR = $1`,
       [companyId]
     );
 
@@ -327,7 +354,7 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
     }));
 
     const products = prodRes.rows.map(p => ({
-      product_id: p.product_id || p.id || p.sku,
+      product_id: p.product_id || (p.id ? String(p.id) : p.sku),
       name: p.name || p.product_name,
       stock_in: Number(p.stock_in || 0),
       stock_sold: Number(p.stock_sold || 0),
@@ -354,17 +381,17 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   try {
     await ensureCompanyAndBranch(client, companyId);
 
-    const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
-    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1', [companyId]);
+    const compRes = await client.query('SELECT * FROM companies WHERE company_id::VARCHAR = $1', [companyId]);
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id::VARCHAR = $1', [companyId]);
     const trxRes = await client.query(
       `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
        FROM transactions
-       WHERE company_id = $1
+       WHERE company_id::VARCHAR = $1
        ORDER BY created_at DESC`,
       [companyId]
     );
     const prodRes = await client.query(
-      `SELECT * FROM products WHERE company_id = $1`,
+      `SELECT * FROM products WHERE company_id::VARCHAR = $1`,
       [companyId]
     );
 
@@ -383,7 +410,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     }));
 
     const inventory = prodRes.rows.map(p => ({
-      product_id: p.product_id || p.id || p.sku,
+      product_id: p.product_id || (p.id ? String(p.id) : p.sku),
       product_name: p.name || p.product_name,
       category: p.category || 'Umum',
       unit_price: Number(p.unit_price !== undefined ? p.unit_price : (p.price || 0)),
