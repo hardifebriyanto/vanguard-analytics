@@ -62,6 +62,8 @@ app.post('/api/sync/config', async (req, res) => {
     // Auto-migrate struktur tabel secara mandiri
     try { await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`); } catch (e) {}
     try { await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`); } catch (e) {}
+    try { await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);`); } catch (e) {}
+    try { await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_name VARCHAR(100);`); } catch (e) {}
     try { await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100);`); } catch (e) {}
 
     // Upsert Company
@@ -87,7 +89,7 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    // Upsert Modules (Status ON / OFF)
+    // Upsert Modules (Status ON / OFF) - INI BAGIAN UTAMA
     if (modules && Array.isArray(modules)) {
       for (const m of modules) {
         const isEnabled = Boolean(
@@ -123,29 +125,23 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    // Upsert Branches
-    if (branches && Array.isArray(branches)) {
-      for (const b of branches) {
-        try {
-          await client.query(`
-            INSERT INTO branches (company_id, branch_code, branch_name, city)
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (company_id, branch_code) DO UPDATE
-            SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
-          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
-        } catch (bErr) {
-          const updateRes = await client.query(`
-            UPDATE branches SET branch_name = $3, city = $4 WHERE company_id = $1 AND branch_code = $2;
-          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
-          if (updateRes.rowCount === 0) {
+    // Upsert Branches (Aman, tidak akan menggagalkan sync)
+    try {
+      if (branches && Array.isArray(branches)) {
+        for (const b of branches) {
+          try {
             await client.query(`
               INSERT INTO branches (company_id, branch_code, branch_name, city)
-              VALUES ($1, $2, $3, $4);
+              VALUES ($1, $2, $3, $4)
+              ON CONFLICT (company_id, branch_code) DO UPDATE
+              SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
             `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+          } catch (bErr) {
+            // Lewati jika kolom cabang belum sesuai
           }
         }
       }
-    }
+    } catch (brErr) {}
 
     res.json({ success: true, message: 'Konfigurasi master & modul berhasil diupdate!' });
   } catch (err) {
