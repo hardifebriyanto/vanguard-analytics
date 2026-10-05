@@ -20,7 +20,7 @@ const pool = new Pool({
   }
 });
 
-// Helper Pengecekan Kunci Keamanan Super Fleksibel
+// Helper Pengecekan Kunci Keamanan Fleksibel & Kebal Firewall
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -61,11 +61,13 @@ app.post('/api/sync/config', async (req, res) => {
 
     await client.query('BEGIN');
 
-    // Auto-migrate kolom plan_tier jika belum ada
+    // Auto-migrate tabel & kolom jika belum ada
     try {
       await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`);
+      await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
+      await client.query(`ALTER TABLE branches ADD COLUMN IF NOT EXISTS city VARCHAR(100);`);
     } catch (e) {
-      console.log('Notice: plan_tier column check', e.message);
+      console.log('Notice schema check:', e.message);
     }
 
     // Upsert Company
@@ -82,7 +84,6 @@ app.post('/api/sync/config', async (req, res) => {
           SET company_name = EXCLUDED.company_name, plan_tier = EXCLUDED.plan_tier;
         `, [compId, compName, planTier]);
       } catch (cErr) {
-        // Fallback jika database versi lama tanpa kolom plan_tier
         await client.query(`
           INSERT INTO companies (company_id, company_name)
           VALUES ($1, $2)
@@ -103,24 +104,53 @@ app.post('/api/sync/config', async (req, res) => {
           String(m.is_enabled).trim().toUpperCase() === 'ON' ||
           String(m.is_enabled).trim().toUpperCase() === 'AKTIF'
         );
-        await client.query(`
-          INSERT INTO modules (company_id, module_code, module_name, is_enabled)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (company_id, module_code) DO UPDATE
-          SET module_name = EXCLUDED.module_name, is_enabled = EXCLUDED.is_enabled;
-        `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+
+        try {
+          await client.query(`
+            INSERT INTO modules (company_id, module_code, module_name, is_enabled)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (company_id, module_code) DO UPDATE
+            SET module_name = EXCLUDED.module_name, is_enabled = EXCLUDED.is_enabled;
+          `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+        } catch (mErr) {
+          // Fallback aman jika tabel belum memiliki unique index
+          const updateRes = await client.query(`
+            UPDATE modules 
+            SET module_name = $3, is_enabled = $4 
+            WHERE company_id = $1 AND module_code = $2;
+          `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+
+          if (updateRes.rowCount === 0) {
+            await client.query(`
+              INSERT INTO modules (company_id, module_code, module_name, is_enabled)
+              VALUES ($1, $2, $3, $4);
+            `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+          }
+        }
       }
     }
 
     // Upsert Branches
     if (branches && Array.isArray(branches)) {
       for (const b of branches) {
-        await client.query(`
-          INSERT INTO branches (company_id, branch_code, branch_name, city)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (company_id, branch_code) DO UPDATE
-          SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
-        `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+        try {
+          await client.query(`
+            INSERT INTO branches (company_id, branch_code, branch_name, city)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (company_id, branch_code) DO UPDATE
+            SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
+          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+        } catch (bErr) {
+          const updateRes = await client.query(`
+            UPDATE branches SET branch_name = $3, city = $4 WHERE company_id = $1 AND branch_code = $2;
+          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+          if (updateRes.rowCount === 0) {
+            await client.query(`
+              INSERT INTO branches (company_id, branch_code, branch_name, city)
+              VALUES ($1, $2, $3, $4);
+            `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+          }
+        }
       }
     }
 
@@ -153,21 +183,37 @@ app.post('/api/sync/import', async (req, res) => {
     await client.query('BEGIN');
 
     for (const t of transactions) {
-      await client.query(`
-        INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (company_id, trx_id) DO UPDATE
-        SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty;
-      `, [
-        targetCompId,
-        t.branch_code || 'BR-01',
-        t.trx_id,
-        t.trx_date,
-        t.customer_name,
-        t.product_name,
-        t.qty || 1,
-        t.total_amount || 0
-      ]);
+      try {
+        await client.query(`
+          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (company_id, trx_id) DO UPDATE
+          SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty;
+        `, [
+          targetCompId,
+          t.branch_code || 'BR-01',
+          t.trx_id,
+          t.trx_date,
+          t.customer_name,
+          t.product_name,
+          t.qty || 1,
+          t.total_amount || 0
+        ]);
+      } catch (sErr) {
+        await client.query(`
+          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+        `, [
+          targetCompId,
+          t.branch_code || 'BR-01',
+          t.trx_id,
+          t.trx_date,
+          t.customer_name,
+          t.product_name,
+          t.qty || 1,
+          t.total_amount || 0
+        ]);
+      }
     }
 
     await client.query('COMMIT');
@@ -187,6 +233,11 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   const client = await pool.connect();
 
   try {
+    // Auto-migrate jika kolom is_enabled belum ada
+    try {
+      await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
+    } catch (e) {}
+
     // Company
     const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
     const company = compRes.rows[0] || { company_id: companyId, company_name: 'PT Maju Jaya', plan_tier: 'STANDARD' };
