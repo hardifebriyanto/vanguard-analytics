@@ -20,7 +20,7 @@ const pool = new Pool({
   }
 });
 
-// Helper Pengecekan Kunci Keamanan Fleksibel & Kebal Firewall
+// Helper Auth Key
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -49,7 +49,36 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. Sync Config (Master Tenant & Modules)
+// 2. Daftar Perusahaan (Multi-Tenant Companies List)
+app.get('/api/companies', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const compRes = await client.query('SELECT company_id, company_name, plan_tier FROM companies ORDER BY company_id ASC');
+    let companies = compRes.rows;
+
+    // Pastikan COMP-001 dan COMP-002 selalu ada
+    if (!companies.some(c => c.company_id === 'COMP-001')) {
+      companies.unshift({ company_id: 'COMP-001', company_name: 'PT Maju Jaya (Kopi)', plan_tier: 'ENTERPRISE' });
+    }
+    if (!companies.some(c => c.company_id === 'COMP-002')) {
+      companies.push({ company_id: 'COMP-002', company_name: 'CV Berkah Abadi (Bakery)', plan_tier: 'BASIC' });
+    }
+
+    res.json({ success: true, companies: companies });
+  } catch (err) {
+    res.json({
+      success: true,
+      companies: [
+        { company_id: 'COMP-001', company_name: 'PT Maju Jaya', plan_tier: 'ENTERPRISE' },
+        { company_id: 'COMP-002', company_name: 'CV Berkah Abadi (Bakery)', plan_tier: 'BASIC' }
+      ]
+    });
+  } finally {
+    client.release();
+  }
+});
+
+// 3. Sync Config
 app.post('/api/sync/config', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -57,13 +86,11 @@ app.post('/api/sync/config', async (req, res) => {
 
   const client = await pool.connect();
   try {
-    const { company, modules, branches } = req.body;
+    const { company, modules } = req.body;
 
-    // Auto-migrate struktur tabel secara mandiri
     try { await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`); } catch (e) {}
     try { await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`); } catch (e) {}
 
-    // Upsert Company
     if (company) {
       const compId = company.company_id || company.id || 'COMP-001';
       const compName = company.company_name || company.name || 'PT Maju Jaya';
@@ -86,7 +113,6 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    // Upsert Modules (Status ON / OFF)
     if (modules && Array.isArray(modules)) {
       for (const m of modules) {
         const isEnabled = Boolean(
@@ -131,7 +157,7 @@ app.post('/api/sync/config', async (req, res) => {
   }
 });
 
-// 3. Sync Transactions Import (Isi kolom transaction_no & trx_id)
+// 4. Sync Transactions Import
 app.post('/api/sync/import', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -146,10 +172,7 @@ app.post('/api/sync/import', async (req, res) => {
       return res.json({ success: true, message: 'Tidak ada data transaksi.' });
     }
 
-    // Auto-migrate & lemaskan constraint
-    try {
-      await client.query(`ALTER TABLE sales ALTER COLUMN transaction_no DROP NOT NULL;`);
-    } catch (e) {}
+    try { await client.query(`ALTER TABLE sales ALTER COLUMN transaction_no DROP NOT NULL;`); } catch (e) {}
     try {
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS trx_id VARCHAR(50);`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS transaction_no VARCHAR(50);`);
@@ -180,9 +203,7 @@ app.post('/api/sync/import', async (req, res) => {
           t.qty || 1,
           t.total_amount || 0
         ]);
-      } catch (sErr) {
-        console.log('Insert row error:', sErr.message);
-      }
+      } catch (sErr) {}
     }
 
     res.json({ success: true, message: `${transactions.length} transaksi berhasil disinkron!` });
@@ -194,23 +215,63 @@ app.post('/api/sync/import', async (req, res) => {
   }
 });
 
-// 4. Dashboard Data API (Live dari Neon DB)
+// 5. Dashboard Data API (Multi-Tenant Real)
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
 
   try {
-    // A. Company
-    let company = { company_id: companyId, company_name: 'PT Maju Jaya', plan_tier: 'ENTERPRISE' };
+    // === SEED KHUSUS JIKA CLIENT 2 (COMP-002) DIBUKA PERTAMA KALI ===
+    if (companyId === 'COMP-002') {
+      try {
+        await client.query(`
+          INSERT INTO companies (company_id, company_name, plan_tier)
+          VALUES ('COMP-002', 'CV Berkah Abadi (Bakery)', 'BASIC')
+          ON CONFLICT (company_id) DO NOTHING;
+        `);
+        // Modul COMP-002: Hanya Sales yang ON, yang lain OFF (Terkunci)
+        const defaultMod = [
+          ['COMP-002', 'SALES', 'Sales Analytics', true],
+          ['COMP-002', 'FINANCE', 'Financial Analytics', false],
+          ['COMP-002', 'INVENTORY', 'Inventory Analytics', false],
+          ['COMP-002', 'CUSTOMER', 'Customer Analytics', false],
+          ['COMP-002', 'PRODUCTION', 'Production Analytics', false],
+          ['COMP-002', 'REPORT', 'Report Management', false]
+        ];
+        for (const [cid, code, name, on] of defaultMod) {
+          await client.query(`
+            INSERT INTO modules (company_id, module_code, module_name, is_enabled)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (company_id, module_code) DO NOTHING;
+          `, [cid, code, name, on]);
+        }
+        // Transaksi khusus COMP-002 (Bakery)
+        const bakeryTrx = [
+          ['COMP-002', 'BR-B1', 'TRX-BK01', '2026-10-04', 'Cafe Senopati', 'Croissant Butter Keju', 30, 900000],
+          ['COMP-002', 'BR-B1', 'TRX-BK02', '2026-10-05', 'Toko Kue Manis', 'Donat Cokelat Lumer', 50, 500000],
+          ['COMP-002', 'BR-B2', 'TRX-BK03', '2026-10-05', 'Warung Ibu Sri', 'Roti Sisir Mentega', 25, 375000]
+        ];
+        for (const [cid, br, tid, dt, cust, prod, q, tot] of bakeryTrx) {
+          await client.query(`
+            INSERT INTO sales (company_id, branch_code, trx_id, transaction_no, trx_date, customer_name, product_name, qty, total_amount)
+            VALUES ($1, $2, $3, $3, $4, $5, $6, $7, $8)
+            ON CONFLICT (company_id, trx_id) DO NOTHING;
+          `, [cid, br, tid, dt, cust, prod, q, tot]);
+        }
+      } catch (seedErr) {}
+    }
+
+    // A. Company Info
+    let company = { company_id: companyId, company_name: companyId === 'COMP-002' ? 'CV Berkah Abadi' : 'PT Maju Jaya', plan_tier: companyId === 'COMP-002' ? 'BASIC' : 'ENTERPRISE' };
     try {
       const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
       if (compRes.rows[0]) company = compRes.rows[0];
     } catch (e) {}
 
-    // B. Modules (Baca seluruh status ON/OFF)
+    // B. Modules (Isolasi per tenant)
     let modules = [];
     try {
-      const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1', [companyId]);
+      const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1 ORDER BY id ASC', [companyId]);
       modules = modRes.rows;
     } catch (e) {}
 
@@ -226,7 +287,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
         WHERE company_id = $1
       `, [companyId]);
 
-      if (kpiRes.rows[0] && Number(kpiRes.rows[0].total_trx) > 0) {
+      if (kpiRes.rows[0]) {
         kpi.totalRevenue = Number(kpiRes.rows[0].total_revenue);
         kpi.totalTrx = Number(kpiRes.rows[0].total_trx);
         kpi.totalQty = Number(kpiRes.rows[0].total_qty);
@@ -282,7 +343,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       }
     } catch (e) {}
 
-    // G. Recent Transactions (Query transaction_no & trx_id)
+    // G. Recent Transactions
     let transactions = [];
     try {
       const trxRes = await client.query(`
@@ -300,9 +361,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
         LIMIT 15
       `, [companyId]);
       transactions = trxRes.rows;
-    } catch (e) {
-      console.log('Query trx error:', e.message);
-    }
+    } catch (e) {}
 
     res.json({
       success: true,
@@ -323,12 +382,10 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   }
 });
 
-// Root Route
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Export app for Vercel Serverless
 module.exports = app;
 
 if (process.env.NODE_ENV !== 'production') {
