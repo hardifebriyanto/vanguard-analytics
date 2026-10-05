@@ -17,23 +17,28 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Auto-Migration: Menyiapkan Kolom Profil & Bersihkan COMP-002
+// Auto-Migration & Perbaikan Indeks Database
 async function initDb() {
   const client = await pool.connect();
   try {
+    // 1. Tambah kolom profil jika belum ada
     await client.query(`
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS logo_url TEXT;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS address TEXT;
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS phone VARCHAR(50);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS email VARCHAR(100);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(50);
+    `);
 
+    // 2. Bersihkan COMP-002 sesuai permintaan
+    await client.query(`
       DELETE FROM sales WHERE company_id = 'COMP-002';
       DELETE FROM modules WHERE company_id = 'COMP-002';
       DELETE FROM branches WHERE company_id = 'COMP-002';
       DELETE FROM companies WHERE company_id = 'COMP-002';
     `);
-    console.log('✅ DB Siap: COMP-002 dibersihkan & Kolom profil aktif');
+
+    console.log('✅ DB Siap: Migrasi kolom profil & pembersihan selesai.');
   } catch (err) {
     console.warn('DB Init Log:', err.message);
   } finally {
@@ -42,7 +47,7 @@ async function initDb() {
 }
 initDb();
 
-// Cek Kunci API Keamanan
+// Helper Verifikasi API Key
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -61,16 +66,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. Sync Master Config (Profil Perusahaan, Logo, Modul & Cabang)
+// 2. Sync Master Config (Profil Perusahaan, Logo, Modul & Cabang) - METODE KEBAL CONSTRAINT
 app.post('/api/sync/config', async (req, res) => {
   if (!checkApiKey(req)) {
-    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak cocok.' });
+    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
   }
 
   const client = await pool.connect();
   try {
     const { company, modules, branches } = req.body;
 
+    // A. Simpan Profil Perusahaan
     if (company) {
       const compId = company.company_id || 'COMP-001';
       const compName = company.company_name || 'VARDHANA NIRWANA';
@@ -81,20 +87,22 @@ app.post('/api/sync/config', async (req, res) => {
       const email = company.email || '';
       const status = company.status || 'ACTIVE';
 
-      await client.query(`
-        INSERT INTO companies (company_id, company_name, plan_tier, logo_url, address, phone, email, status)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (company_id) DO UPDATE
-        SET company_name = EXCLUDED.company_name,
-            plan_tier = EXCLUDED.plan_tier,
-            logo_url = EXCLUDED.logo_url,
-            address = EXCLUDED.address,
-            phone = EXCLUDED.phone,
-            email = EXCLUDED.email,
-            status = EXCLUDED.status;
-      `, [compId, compName, planTier, logoUrl, address, phone, email, status]);
+      const checkComp = await client.query('SELECT id FROM companies WHERE company_id = $1', [compId]);
+      if (checkComp.rows.length > 0) {
+        await client.query(`
+          UPDATE companies
+          SET company_name = $1, plan_tier = $2, logo_url = $3, address = $4, phone = $5, email = $6, status = $7
+          WHERE company_id = $8
+        `, [compName, planTier, logoUrl, address, phone, email, status, compId]);
+      } else {
+        await client.query(`
+          INSERT INTO companies (company_id, company_name, plan_tier, logo_url, address, phone, email, status)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [compId, compName, planTier, logoUrl, address, phone, email, status]);
+      }
     }
 
+    // B. Simpan Modul ON / OFF
     if (modules && Array.isArray(modules)) {
       for (const m of modules) {
         const isEnabled = Boolean(
@@ -104,27 +112,43 @@ app.post('/api/sync/config', async (req, res) => {
           String(m.is_enabled).trim().toUpperCase() === 'ON' ||
           String(m.is_enabled).trim().toUpperCase() === 'AKTIF'
         );
-        await client.query(`
-          INSERT INTO modules (company_id, module_code, module_name, is_enabled)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (company_id, module_code) DO UPDATE
-          SET module_name = EXCLUDED.module_name, is_enabled = EXCLUDED.is_enabled;
-        `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+
+        const checkMod = await client.query('SELECT id FROM modules WHERE company_id = $1 AND module_code = $2', [m.company_id, m.module_code]);
+        if (checkMod.rows.length > 0) {
+          await client.query(`
+            UPDATE modules
+            SET module_name = $1, is_enabled = $2
+            WHERE company_id = $3 AND module_code = $4
+          `, [m.module_name, isEnabled, m.company_id, m.module_code]);
+        } else {
+          await client.query(`
+            INSERT INTO modules (company_id, module_code, module_name, is_enabled)
+            VALUES ($1, $2, $3, $4)
+          `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+        }
       }
     }
 
+    // C. Simpan Cabang (Multi-Cabang)
     if (branches && Array.isArray(branches)) {
       for (const b of branches) {
-        await client.query(`
-          INSERT INTO branches (company_id, branch_code, branch_name, city)
-          VALUES ($1, $2, $3, $4)
-          ON CONFLICT (company_id, branch_code) DO UPDATE
-          SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
-        `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+        const checkBr = await client.query('SELECT id FROM branches WHERE company_id = $1 AND branch_code = $2', [b.company_id, b.branch_code]);
+        if (checkBr.rows.length > 0) {
+          await client.query(`
+            UPDATE branches
+            SET branch_name = $1, city = $2
+            WHERE company_id = $3 AND branch_code = $4
+          `, [b.branch_name, b.city, b.company_id, b.branch_code]);
+        } else {
+          await client.query(`
+            INSERT INTO branches (company_id, branch_code, branch_name, city)
+            VALUES ($1, $2, $3, $4)
+          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+        }
       }
     }
 
-    res.json({ success: true, message: 'Master profil, modul & cabang berhasil disimpan!' });
+    res.json({ success: true, message: 'Master profil, logo, modul & cabang berhasil disimpan!' });
   } catch (err) {
     console.error('Sync Error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -136,7 +160,7 @@ app.post('/api/sync/config', async (req, res) => {
 // 3. Sync Transactions
 app.post('/api/sync/import', async (req, res) => {
   if (!checkApiKey(req)) {
-    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak cocok.' });
+    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
   }
 
   const client = await pool.connect();
@@ -149,21 +173,28 @@ app.post('/api/sync/import', async (req, res) => {
     }
 
     for (const t of transactions) {
-      await client.query(`
-        INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        ON CONFLICT (company_id, trx_id) DO UPDATE
-        SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty, branch_code = EXCLUDED.branch_code;
-      `, [
-        targetCompId,
-        t.branch_code || 'BR-01',
-        t.trx_id,
-        t.trx_date,
-        t.customer_name,
-        t.product_name,
-        t.qty || 1,
-        t.total_amount || 0
-      ]);
+      const checkSale = await client.query('SELECT id FROM sales WHERE company_id = $1 AND trx_id = $2', [targetCompId, t.trx_id]);
+      if (checkSale.rows.length > 0) {
+        await client.query(`
+          UPDATE sales
+          SET total_amount = $1, qty = $2, branch_code = $3, trx_date = $4, customer_name = $5, product_name = $6
+          WHERE company_id = $7 AND trx_id = $8
+        `, [t.total_amount || 0, t.qty || 1, t.branch_code || 'BR-01', t.trx_date, t.customer_name, t.product_name, targetCompId, t.trx_id]);
+      } else {
+        await client.query(`
+          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `, [
+          targetCompId,
+          t.branch_code || 'BR-01',
+          t.trx_id,
+          t.trx_date,
+          t.customer_name,
+          t.product_name,
+          t.qty || 1,
+          t.total_amount || 0
+        ]);
+      }
     }
 
     res.json({ success: true, message: `${transactions.length} transaksi cabang tersinkron!` });
