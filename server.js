@@ -15,48 +15,109 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Helper: Pastikan Tenant & Cabang Otomatis Terdaftar jika Baru
+// Helper: Auto-Register Tenant Baru & Cabang Default
 async function ensureCompanyAndBranch(client, companyId, companyName = null) {
   const cleanId = String(companyId || 'COMP-001').trim();
-  const displayName = companyName || cleanId.toUpperCase().replace(/-/g, ' ');
+  const displayName = companyName || cleanId;
 
-  // 1. Cek / Buat Company
+  // 1. Cek Kolom yang ada di tabel companies
+  const colRes = await client.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'companies'`
+  );
+  const cols = colRes.rows.map(r => r.column_name.toLowerCase());
+
+  // 2. Cek apakah company_id sudah terdaftar
   const compCheck = await client.query('SELECT company_id FROM companies WHERE company_id = $1', [cleanId]);
   if (compCheck.rows.length === 0) {
+    const insertCols = ['company_id'];
+    const insertVals = [cleanId];
+    const placeholders = ['$1'];
+    let idx = 2;
+
+    if (cols.includes('company_name')) {
+      insertCols.push('company_name');
+      insertVals.push(displayName);
+      placeholders.push(`$${idx++}`);
+    } else if (cols.includes('name')) {
+      insertCols.push('name');
+      insertVals.push(displayName);
+      placeholders.push(`$${idx++}`);
+    }
+
+    if (cols.includes('package_id')) {
+      insertCols.push('package_id');
+      insertVals.push('BASIC');
+      placeholders.push(`$${idx++}`);
+    } else if (cols.includes('plan_tier')) {
+      insertCols.push('plan_tier');
+      insertVals.push('PRO');
+      placeholders.push(`$${idx++}`);
+    }
+
     await client.query(
-      `INSERT INTO companies (company_id, name, plan_tier) VALUES ($1, $2, 'PRO')`,
-      [cleanId, displayName]
+      `INSERT INTO companies (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
+      insertVals
     );
   }
 
-  // 2. Cek / Buat Cabang Utama Default
+  // 3. Cek Kolom yang ada di tabel branches
+  const bColRes = await client.query(
+    `SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'`
+  );
+  const bCols = bColRes.rows.map(r => r.column_name.toLowerCase());
+
+  // 4. Cek apakah Cabang sudah ada
   const branchCheck = await client.query('SELECT branch_id FROM branches WHERE company_id = $1', [cleanId]);
   if (branchCheck.rows.length === 0) {
+    const bColsList = ['branch_id', 'company_id'];
+    const bValsList = ['BR-001', cleanId];
+    const bPlaceholders = ['$1', '$2'];
+    let bIdx = 3;
+
+    if (bCols.includes('branch_name')) {
+      bColsList.push('branch_name');
+      bValsList.push('Cabang Utama');
+      bPlaceholders.push(`$${bIdx++}`);
+    } else if (bCols.includes('name')) {
+      bColsList.push('name');
+      bValsList.push('Cabang Utama');
+      bPlaceholders.push(`$${bIdx++}`);
+    }
+
     await client.query(
-      `INSERT INTO branches (branch_id, company_id, name, address) VALUES ($1, $2, $3, $4)`,
-      ['BR-001', cleanId, 'Cabang Utama', 'Pusat Operasional']
+      `INSERT INTO branches (${bColsList.join(', ')}) VALUES (${bPlaceholders.join(', ')})`,
+      bValsList
     );
   }
 }
 
-// 1. INIT POS (Load Toko, Cabang, dan Produk)
+// 1. INIT POS
 app.get('/api/pos/init/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
   try {
     await ensureCompanyAndBranch(client, companyId);
 
-    const compRes = await client.query('SELECT company_id, name, plan_tier FROM companies WHERE company_id = $1', [companyId]);
-    const branchRes = await client.query('SELECT branch_id, name FROM branches WHERE company_id = $1 ORDER BY branch_id ASC', [companyId]);
+    const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1 ORDER BY branch_id ASC', [companyId]);
     const prodRes = await client.query(
       'SELECT product_id, name, category, unit_price, stock_in, stock_sold, current_stock FROM products WHERE company_id = $1 AND is_active = true ORDER BY name ASC',
       [companyId]
     );
 
+    const comp = compRes.rows[0] || {};
+    const branches = branchRes.rows.map(b => ({
+      branch_id: b.branch_id,
+      name: b.branch_name || b.name || b.branch_id
+    }));
+
     res.json({
       success: true,
-      company: compRes.rows[0] || { company_id: companyId, name: companyId },
-      branches: branchRes.rows || [],
+      company: {
+        company_id: companyId,
+        name: comp.company_name || comp.name || companyId
+      },
+      branches: branches,
       products: prodRes.rows || []
     });
   } catch (err) {
@@ -78,7 +139,7 @@ app.post('/api/pos/sync-products', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Pastikan Tenant & Cabang Ada
+    // Auto-create company & branch jika belum ada di database
     await ensureCompanyAndBranch(client, company_id, company_name);
 
     for (const p of products) {
@@ -135,14 +196,12 @@ app.post('/api/pos/checkout', async (req, res) => {
     await client.query('BEGIN');
     const trxId = 'TRX-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 5).toUpperCase();
 
-    // Simpan Header Transaksi
     await client.query(
       `INSERT INTO transactions (trx_id, company_id, branch_id, cashier_name, total_amount, payment_method, items, created_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())`,
       [trxId, company_id, branch_id, cashier_name || 'Kasir', total_amount, payment_method || 'CASH', JSON.stringify(items)]
     );
 
-    // Potong Stok Produk
     for (const item of items) {
       const pId = String(item.product_id).trim();
       const qty = Number(item.quantity || item.qty || 1);
@@ -168,17 +227,22 @@ app.post('/api/pos/checkout', async (req, res) => {
   }
 });
 
-// 4. PULL DATA PENJUALAN & STOK KE GOOGLE SPREADSHEET
+// 4. PULL DATA KE GOOGLE SPREADSHEET
 app.get('/api/sync/pull/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
   try {
+    const branchRes = await client.query('SELECT branch_id, branch_name FROM branches WHERE company_id = $1', [companyId]).catch(() => ({ rows: [] }));
+    const branchMap = {};
+    (branchRes.rows || []).forEach(b => {
+      branchMap[b.branch_id] = b.branch_name || b.name || b.branch_id;
+    });
+
     const trxRes = await client.query(
-      `SELECT t.trx_id, t.created_at, b.name as branch_name, t.cashier_name, t.total_amount, t.payment_method, t.items
-       FROM transactions t
-       LEFT JOIN branches b ON t.branch_id = b.branch_id AND t.company_id = b.company_id
-       WHERE t.company_id = $1
-       ORDER BY t.created_at DESC`,
+      `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
+       FROM transactions
+       WHERE company_id = $1
+       ORDER BY created_at DESC`,
       [companyId]
     );
 
@@ -189,9 +253,14 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
       [companyId]
     );
 
+    const transactions = trxRes.rows.map(t => ({
+      ...t,
+      branch_name: branchMap[t.branch_id] || 'Cabang Utama'
+    }));
+
     res.json({
       success: true,
-      transactions: trxRes.rows || [],
+      transactions: transactions,
       products: prodRes.rows || []
     });
   } catch (err) {
@@ -209,14 +278,13 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
   try {
     await ensureCompanyAndBranch(client, companyId);
 
-    const compRes = await client.query('SELECT company_id, name, plan_tier FROM companies WHERE company_id = $1', [companyId]);
-    const branchRes = await client.query('SELECT branch_id, name FROM branches WHERE company_id = $1', [companyId]);
+    const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1', [companyId]);
     const trxRes = await client.query(
-      `SELECT t.trx_id, t.created_at, t.branch_id, b.name as branch_name, t.cashier_name, t.total_amount, t.payment_method, t.items
-       FROM transactions t
-       LEFT JOIN branches b ON t.branch_id = b.branch_id AND t.company_id = b.company_id
-       WHERE t.company_id = $1
-       ORDER BY t.created_at DESC`,
+      `SELECT trx_id, created_at, branch_id, cashier_name, total_amount, payment_method, items
+       FROM transactions
+       WHERE company_id = $1
+       ORDER BY created_at DESC`,
       [companyId]
     );
     const prodRes = await client.query(
@@ -227,11 +295,28 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       [companyId]
     );
 
+    const comp = compRes.rows[0] || {};
+    const branches = branchRes.rows.map(b => ({
+      branch_id: b.branch_id,
+      name: b.branch_name || b.name || b.branch_id
+    }));
+
+    const branchMap = {};
+    branches.forEach(b => { branchMap[b.branch_id] = b.name; });
+
+    const transactions = trxRes.rows.map(t => ({
+      ...t,
+      branch_name: branchMap[t.branch_id] || 'Cabang Utama'
+    }));
+
     res.json({
       success: true,
-      company: compRes.rows[0] || { company_id: companyId, name: companyId },
-      branches: branchRes.rows || [],
-      transactions: trxRes.rows || [],
+      company: {
+        company_id: companyId,
+        name: comp.company_name || comp.name || companyId
+      },
+      branches: branches,
+      transactions: transactions,
       inventory: prodRes.rows || []
     });
   } catch (err) {
