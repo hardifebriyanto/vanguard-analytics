@@ -131,7 +131,7 @@ app.post('/api/sync/config', async (req, res) => {
   }
 });
 
-// 3. Sync Transactions Import
+// 3. Sync Transactions Import (Auto-Migrate Kolom Sales)
 app.post('/api/sync/import', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -146,13 +146,26 @@ app.post('/api/sync/import', async (req, res) => {
       return res.json({ success: true, message: 'Tidak ada data transaksi.' });
     }
 
+    // Auto-migrate kolom tabel sales jika belum ada
+    try {
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS trx_id VARCHAR(50);`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_name VARCHAR(100);`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS product_name VARCHAR(100);`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS qty NUMERIC DEFAULT 1;`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS total_amount NUMERIC DEFAULT 0;`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS trx_date DATE DEFAULT CURRENT_DATE;`);
+    } catch (migErr) {
+      console.log('Notice sales migration:', migErr.message);
+    }
+
     for (const t of transactions) {
       try {
         await client.query(`
           INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (company_id, trx_id) DO UPDATE
-          SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty;
+          SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty, customer_name = EXCLUDED.customer_name, product_name = EXCLUDED.product_name;
         `, [
           targetCompId,
           t.branch_code || 'BR-01',
@@ -164,6 +177,7 @@ app.post('/api/sync/import', async (req, res) => {
           t.total_amount || 0
         ]);
       } catch (sErr) {
+        // Fallback jika belum ada unique index pada (company_id, trx_id)
         await client.query(`
           INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
@@ -189,12 +203,16 @@ app.post('/api/sync/import', async (req, res) => {
   }
 });
 
-// 4. Dashboard Data API (Super Resilient & Bebas Crash)
+// 4. Dashboard Data API (Super Resilient & Live dari Neon DB)
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
 
   try {
+    try {
+      await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
+    } catch (e) {}
+
     // A. Company
     let company = { company_id: companyId, company_name: 'PT Maju Jaya', plan_tier: 'ENTERPRISE' };
     try {
@@ -210,7 +228,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     } catch (e) {}
 
     // C. KPI Total Sales
-    let kpi = { totalRevenue: 4700000, totalTrx: 4, totalQty: 115, topProduct: 'Kopi Arabika 250g' };
+    let kpi = { totalRevenue: 0, totalTrx: 0, totalQty: 0, topProduct: '-' };
     try {
       const kpiRes = await client.query(`
         SELECT 
@@ -242,8 +260,8 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     } catch (e) {}
 
     // E. Daily Sales
-    let dailyLabels = ['2026-10-01', '2026-10-02'];
-    let dailyValues = [1500000, 3200000];
+    let dailyLabels = [];
+    let dailyValues = [];
     try {
       const dailyRes = await client.query(`
         SELECT TO_CHAR(trx_date, 'YYYY-MM-DD') as s_date, SUM(total_amount) as daily_total
@@ -260,8 +278,8 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     } catch (e) {}
 
     // F. Top Products Breakdown
-    let topProdLabels = ['Kopi Arabika 250g', 'Teh Hijau Celup', 'Kopi Robusta 500g'];
-    let topProdValues = [3150000, 750000, 800000];
+    let topProdLabels = [];
+    let topProdValues = [];
     try {
       const top5ProdRes = await client.query(`
         SELECT product_name, SUM(total_amount) as total_amount
@@ -277,18 +295,30 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       }
     } catch (e) {}
 
-    // G. Recent Transactions (Aman tanpa JOIN rentan error)
+    // G. Recent Transactions (Live dari Neon DB)
     let transactions = [];
     try {
       const trxRes = await client.query(`
         SELECT trx_id, trx_date, customer_name, product_name, qty, total_amount, branch_code as branch_name
         FROM sales
         WHERE company_id = $1
-        ORDER BY trx_date DESC
-        LIMIT 10
+        ORDER BY trx_date DESC, id DESC
+        LIMIT 15
       `, [companyId]);
       transactions = trxRes.rows;
-    } catch (e) {}
+    } catch (e) {
+      // Fallback tanpa id
+      try {
+        const trxRes2 = await client.query(`
+          SELECT trx_id, trx_date, customer_name, product_name, qty, total_amount, branch_code as branch_name
+          FROM sales
+          WHERE company_id = $1
+          ORDER BY trx_date DESC
+          LIMIT 15
+        `, [companyId]);
+        transactions = trxRes2.rows;
+      } catch (e2) {}
+    }
 
     res.json({
       success: true,
