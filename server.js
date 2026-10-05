@@ -17,7 +17,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Auto-Migration Kolom Profil & Relaksasi Constraint
+// Auto-Migration Kolom Profil & Bersihkan Sampah COMP-002
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -41,7 +41,7 @@ async function initDb() {
       DELETE FROM branches WHERE company_id = 'COMP-002';
       DELETE FROM companies WHERE company_id = 'COMP-002';
     `);
-    console.log('✅ DB Siap: Cabang & Profil sinkron.');
+    console.log('✅ DB Siap: COMP-002 dibersihkan & tabel siap.');
   } catch (err) {
     console.warn('DB Init Log:', err.message);
   } finally {
@@ -69,7 +69,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. Sync Master Config (Mengisi branch_id & branch_code Sekaligus)
+// 2. Sync Master Config (Auto-Clean Old Ghost Branches)
 app.post('/api/sync/config', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -78,10 +78,10 @@ app.post('/api/sync/config', async (req, res) => {
   const client = await pool.connect();
   try {
     const { company, modules, branches } = req.body;
+    const compId = (company && company.company_id) ? company.company_id : 'COMP-001';
 
     // A. Simpan Profil Perusahaan
     if (company) {
-      const compId = company.company_id || 'COMP-001';
       const compName = company.company_name || 'VARDHANA NIRWANA';
       const planTier = company.plan_tier || 'BASIC';
       const logoUrl = company.logo_url || '';
@@ -118,46 +118,38 @@ app.post('/api/sync/config', async (req, res) => {
         const mCode = String(m.module_code || m.module_id || 'MOD_SALES').trim();
         const mName = String(m.module_name || mCode).trim();
 
-        const checkMod = await client.query('SELECT 1 FROM modules WHERE company_id = $1 AND (module_code = $2 OR module_id = $2)', [m.company_id, mCode]);
+        const checkMod = await client.query('SELECT 1 FROM modules WHERE company_id = $1 AND (module_code = $2 OR module_id = $2)', [compId, mCode]);
         if (checkMod.rows.length > 0) {
           await client.query(`
             UPDATE modules
             SET module_name = $1, is_enabled = $2, module_code = $3, module_id = $3
             WHERE company_id = $4 AND (module_code = $5 OR module_id = $5)
-          `, [mName, isEnabled, mCode, m.company_id, mCode]);
+          `, [mName, isEnabled, mCode, compId, mCode]);
         } else {
           await client.query(`
             INSERT INTO modules (module_id, company_id, module_code, module_name, is_enabled)
             VALUES ($1, $2, $3, $4, $5)
-          `, [mCode, m.company_id, mCode, mName, isEnabled]);
+          `, [mCode, compId, mCode, mName, isEnabled]);
         }
       }
     }
 
-    // C. Simpan Cabang (Mengisi branch_id & branch_code agar tidak NULL)
+    // C. Simpan Cabang: BERSIHKAN CABANG LAMA DAHULU agar tidak ada cabang hantu (Jakarta/Surabaya)
     if (branches && Array.isArray(branches)) {
+      await client.query('DELETE FROM branches WHERE company_id = $1', [compId]);
       for (const b of branches) {
         const bCode = String(b.branch_code || b.branch_id || 'BR-01').trim();
         const bName = String(b.branch_name || bCode).trim();
         const bCity = String(b.city || '-').trim();
 
-        const checkBr = await client.query('SELECT 1 FROM branches WHERE company_id = $1 AND (branch_code = $2 OR branch_id = $2)', [b.company_id, bCode]);
-        if (checkBr.rows.length > 0) {
-          await client.query(`
-            UPDATE branches
-            SET branch_name = $1, city = $2, branch_code = $3, branch_id = $3
-            WHERE company_id = $4 AND (branch_code = $5 OR branch_id = $5)
-          `, [bName, bCity, bCode, b.company_id, bCode]);
-        } else {
-          await client.query(`
-            INSERT INTO branches (branch_id, company_id, branch_code, branch_name, city)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [bCode, b.company_id, bCode, bName, bCity]);
-        }
+        await client.query(`
+          INSERT INTO branches (branch_id, company_id, branch_code, branch_name, city)
+          VALUES ($1, $2, $3, $4, $5)
+        `, [bCode, compId, bCode, bName, bCity]);
       }
     }
 
-    res.json({ success: true, message: 'Master profil, logo, modul & cabang berhasil disimpan!' });
+    res.json({ success: true, message: 'Master profil, logo, modul & cabang diperbarui bersih!' });
   } catch (err) {
     console.error('Sync Error:', err);
     res.status(500).json({ success: false, message: err.message });
@@ -166,7 +158,7 @@ app.post('/api/sync/config', async (req, res) => {
   }
 });
 
-// 3. Sync Transactions
+// 3. Sync Transactions (Auto-Clean Old Ghost Sample Data)
 app.post('/api/sync/import', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -178,35 +170,30 @@ app.post('/api/sync/import', async (req, res) => {
     const targetCompId = companyId || 'COMP-001';
 
     if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
-      return res.json({ success: true, message: 'Data kosong.' });
+      return res.json({ success: true, message: 'Data transaksi kosong.' });
     }
 
+    // Hapus transaksi lama comp ini agar data uji coba/sample yang Rp 0 hilang total!
+    await client.query('DELETE FROM sales WHERE company_id = $1', [targetCompId]);
+
+    // Masukkan hanya transaksi riil dari spreadsheet
     for (const t of transactions) {
-      const checkSale = await client.query('SELECT 1 FROM sales WHERE company_id = $1 AND trx_id = $2', [targetCompId, t.trx_id]);
-      if (checkSale.rows.length > 0) {
-        await client.query(`
-          UPDATE sales
-          SET total_amount = $1, qty = $2, branch_code = $3, trx_date = $4, customer_name = $5, product_name = $6
-          WHERE company_id = $7 AND trx_id = $8
-        `, [t.total_amount || 0, t.qty || 1, t.branch_code || 'BR-01', t.trx_date, t.customer_name, t.product_name, targetCompId, t.trx_id]);
-      } else {
-        await client.query(`
-          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [
-          targetCompId,
-          t.branch_code || 'BR-01',
-          t.trx_id,
-          t.trx_date,
-          t.customer_name,
-          t.product_name,
-          t.qty || 1,
-          t.total_amount || 0
-        ]);
-      }
+      await client.query(`
+        INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `, [
+        targetCompId,
+        t.branch_code || 'BR-01',
+        t.trx_id,
+        t.trx_date,
+        t.customer_name,
+        t.product_name,
+        t.qty || 1,
+        t.total_amount || 0
+      ]);
     }
 
-    res.json({ success: true, message: `${transactions.length} transaksi cabang tersinkron!` });
+    res.json({ success: true, message: `${transactions.length} transaksi murni dari spreadsheet berhasil disinkron!` });
   } catch (err) {
     console.error('Import Error:', err);
     res.status(500).json({ success: false, message: err.message });
