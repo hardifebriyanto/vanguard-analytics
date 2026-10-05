@@ -3,207 +3,321 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vanguard Analytics — Multi-Branch Enterprise</title>
+  <title>Vanguard Analytics - Executive Multi-Branch Dashboard</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Outfit', 'sans-serif']
+          },
+          colors: {
+            brand: {
+              50: '#ecfdf5',
+              100: '#d1fae5',
+              400: '#34d399',
+              500: '#10b981',
+              600: '#059669',
+              900: '#064e3b'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
   <style>
-    @media print {
-      body { background: #fff !important; color: #000 !important; }
-      .no-print { display: none !important; }
-      .print-card { border: 1px solid #ddd !important; background: #fff !important; color: #000 !important; }
-      .text-slate-100, .text-slate-200, .text-slate-300, .text-white { color: #111 !important; }
-      .text-slate-400, .text-slate-500 { color: #555 !important; }
-      .bg-slate-900, .bg-slate-800, .bg-slate-950 { background: #fff !important; }
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-card-hover:hover {
+      border-color: rgba(16, 185, 129, 0.4);
+      box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.1);
     }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-100 font-sans min-h-screen antialiased selection:bg-blue-600 selection:text-white">
 
-  <!-- HEADER NAVIGASI -->
-  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-emerald-500 selection:text-white pb-16">
+
+  <!-- TOP NAVBAR -->
+  <header class="sticky top-0 z-50 bg-slate-900/90 backdrop-blur-md border-b border-slate-800">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
       
+      <!-- Brand Logo & Tenant Badge -->
       <div class="flex items-center space-x-4">
-        <div class="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-slate-800 border border-slate-700 shadow-md">
-          <span id="logoFallback" class="font-black text-xl text-blue-400">V</span>
-          <img id="logoImg" src="" alt="Logo" class="w-full h-full object-contain p-1 hidden bg-white">
+        <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center text-white shadow-lg shadow-emerald-500/20">
+          <i class="fa-solid fa-chart-pie text-xl"></i>
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <h1 id="companyName" class="text-xl font-bold tracking-tight text-white">VARDHANA NIRWANA</h1>
-            <span id="tierBadge" class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-blue-500/20 text-blue-400 border border-blue-500/30">BASIC</span>
-            <span id="statusBadge" class="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">TRIAL</span>
+            <span class="font-display font-extrabold text-xl tracking-tight text-white">VANGUARD</span>
+            <span class="text-xs px-2 py-0.5 rounded font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">CLOUD HYBRID</span>
           </div>
-          <p id="companyMeta" class="text-xs text-slate-400 mt-0.5">Vanguard Cloud Hybrid · Multi-Branch Ready</p>
+          <div class="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
+            <span id="companyNameText" class="font-medium text-slate-300">Memuat profil...</span>
+            <span class="text-slate-600">•</span>
+            <span id="tenantTag" class="font-mono bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded text-[11px]">ID: ...</span>
+          </div>
         </div>
       </div>
 
-      <div class="flex items-center space-x-3 no-print">
-        <div class="hidden sm:flex items-center bg-slate-800/80 border border-slate-700 rounded-lg px-3 py-1.5 space-x-2">
-          <span class="text-xs text-slate-400">Laporan:</span>
-          <span id="activeFilterBadge" class="text-xs font-bold text-emerald-400">Semua Cabang (Konsolidasi)</span>
-        </div>
+      <!-- Quick Actions & POS Link -->
+      <div class="flex items-center space-x-3">
+        <!-- Refresh Button -->
+        <button id="refreshBtn" onclick="loadDashboardData()" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-sm font-medium transition flex items-center space-x-2 shadow-sm">
+          <i id="refreshIcon" class="fa-solid fa-arrows-rotate"></i>
+          <span class="hidden sm:inline">Refresh</span>
+        </button>
 
-        <a href="/pos.html" target="_blank" class="px-3.5 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-md shadow-blue-500/20 flex items-center space-x-1.5">
-          <span>📱 Buka Kasir POS</span>
+        <!-- POS Cashier Direct Link -->
+        <a id="posLinkBtn" href="/pos.html" target="_blank" class="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-slate-950 font-semibold text-sm transition flex items-center space-x-2 shadow-lg shadow-emerald-500/20 active:scale-95">
+          <i class="fa-solid fa-cash-register text-base"></i>
+          <span>Buka Kasir POS</span>
         </a>
-
-        <button onclick="window.print()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-all shadow-sm">
-          🖨️ Cetak PDF
-        </button>
-
-        <button onclick="exportToCsv()" class="px-3 py-1.5 text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg transition-all shadow-sm">
-          📊 Export Excel
-        </button>
       </div>
 
     </div>
   </header>
 
-  <!-- KONTEN DASHBOARD UTAMA -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+  <!-- MAIN CONTAINER -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-8">
 
-    <!-- PANEL NAVIGASI CABANG -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-base font-bold text-white flex items-center space-x-2">
-            <span>🏢 Kinerja Cabang & Outlet (Klik untuk Filter Laporan)</span>
-          </h2>
-          <p class="text-xs text-slate-400">Klik salah satu cabang untuk melihat data detailnya, atau klik 'Semua Cabang' untuk total omzet konsolidasi.</p>
-        </div>
-        <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700" id="branchBadgeCount">5 Cabang Terdata</span>
+    <!-- BRANCH FILTER SELECTOR BAR -->
+    <section class="glass-card rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div class="flex items-center space-x-2 text-sm text-slate-400">
+        <i class="fa-solid fa-code-branch text-emerald-400"></i>
+        <span class="font-medium text-slate-200">Lingkup Cabang:</span>
       </div>
-      <div id="branchListGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
+      <div id="branchPillsContainer" class="flex flex-wrap items-center gap-2">
+        <button onclick="setBranchFilter('ALL')" class="branch-pill active px-4 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 shadow-md transition" data-branch="ALL">
+          Semua Cabang (Global)
+        </button>
+        <!-- Dynamic branch buttons will load here -->
+      </div>
     </section>
 
-    <!-- KPI CARDS -->
+    <!-- 4 MAIN EXECUTIVE KPI CARDS -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-      <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
-        <div class="flex justify-between items-start">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Omzet Penjualan</span>
-          <div class="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">💰</div>
+      
+      <!-- KPI 1: Revenue -->
+      <div class="glass-card glass-card-hover rounded-2xl p-6 relative overflow-hidden transition duration-300">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Total Omset</span>
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+            <i class="fa-solid fa-wallet text-base"></i>
+          </div>
         </div>
         <div class="mt-4">
-          <h3 id="kpiRevenue" class="text-2xl font-black text-white tracking-tight">Rp 0</h3>
-          <p id="kpiFilterSub" class="text-xs text-emerald-400 mt-1 font-semibold">● Real-time Sync Cloud</p>
+          <div id="kpiRevenue" class="font-display font-extrabold text-2xl text-white">Rp 0</div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1">
+            <span class="text-emerald-400"><i class="fa-solid fa-arrow-trend-up"></i> Real-time</span>
+            <span>penjualan kasir</span>
+          </div>
         </div>
       </div>
 
-      <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
-        <div class="flex justify-between items-start">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Total Transaksi</span>
-          <div class="p-2 bg-blue-500/10 text-blue-400 rounded-xl">🧾</div>
+      <!-- KPI 2: Total Transactions -->
+      <div class="glass-card glass-card-hover rounded-2xl p-6 relative overflow-hidden transition duration-300">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Total Transaksi</span>
+          <div class="w-10 h-10 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center">
+            <i class="fa-solid fa-receipt text-base"></i>
+          </div>
         </div>
         <div class="mt-4">
-          <h3 id="kpiTrx" class="text-2xl font-black text-white tracking-tight">0</h3>
-          <p class="text-xs text-slate-400 mt-1">Order Kasir POS & Form</p>
+          <div id="kpiTrx" class="font-display font-extrabold text-2xl text-white">0</div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1">
+            <span class="text-blue-400"><i class="fa-solid fa-circle-check"></i> Tiket struk</span>
+            <span>berhasil</span>
+          </div>
         </div>
       </div>
 
-      <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
-        <div class="flex justify-between items-start">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Volume Terjual</span>
-          <div class="p-2 bg-indigo-500/10 text-indigo-400 rounded-xl">📦</div>
+      <!-- KPI 3: Total Items Sold -->
+      <div class="glass-card glass-card-hover rounded-2xl p-6 relative overflow-hidden transition duration-300">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Item Terjual</span>
+          <div class="w-10 h-10 rounded-xl bg-violet-500/10 text-violet-400 border border-violet-500/20 flex items-center justify-center">
+            <i class="fa-solid fa-boxes-stacked text-base"></i>
+          </div>
         </div>
         <div class="mt-4">
-          <h3 id="kpiQty" class="text-2xl font-black text-white tracking-tight">0 pcs</h3>
-          <p class="text-xs text-slate-400 mt-1">Total Kuantitas Barang</p>
+          <div id="kpiQty" class="font-display font-extrabold text-2xl text-white">0 pcs</div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1">
+            <span class="text-violet-400"><i class="fa-solid fa-box-open"></i> Volume keluar</span>
+            <span>ke pelanggan</span>
+          </div>
         </div>
       </div>
 
-      <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
-        <div class="flex justify-between items-start">
-          <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Top Produk Terlaris</span>
-          <div class="p-2 bg-amber-500/10 text-amber-400 rounded-xl">🏆</div>
+      <!-- KPI 4: Top Product -->
+      <div class="glass-card glass-card-hover rounded-2xl p-6 relative overflow-hidden transition duration-300">
+        <div class="flex items-center justify-between">
+          <span class="text-xs uppercase tracking-wider font-semibold text-slate-400">Produk Terlaris</span>
+          <div class="w-10 h-10 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center">
+            <i class="fa-solid fa-fire text-base"></i>
+          </div>
         </div>
         <div class="mt-4">
-          <h3 id="kpiTopProduct" class="text-lg font-bold text-amber-300 truncate">-</h3>
-          <p class="text-xs text-slate-400 mt-1">Paling Banyak Diminati</p>
+          <div id="kpiTopProduct" class="font-display font-bold text-lg text-white truncate">-</div>
+          <div class="text-xs text-slate-400 mt-1 flex items-center space-x-1">
+            <span class="text-amber-400"><i class="fa-solid fa-star"></i> Paling banyak</span>
+            <span>dipesan</span>
+          </div>
         </div>
       </div>
+
     </section>
 
-    <!-- PANEL INVENTORI: STOK MASUK, TERJUAL & SISA STOK -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-base font-bold text-white flex items-center space-x-2">
-            <span>📦 Pantauan Inventori Stok (Stok Masuk, Terjual & Sisa)</span>
-          </h2>
-          <p class="text-xs text-slate-400">Data live stok produk langsung terpotong saat kasir melakukan transaksi</p>
+    <!-- CHARTS SECTION -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      
+      <!-- Trend Penjualan Harian -->
+      <div class="lg:col-span-7 glass-card rounded-2xl p-6 flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="font-display font-bold text-base text-white flex items-center space-x-2">
+              <i class="fa-solid fa-chart-line text-emerald-400"></i>
+              <span>Tren Penjualan Harian</span>
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Grafik dinamika omset penjualan beberapa hari terakhir</p>
+          </div>
         </div>
-        <span class="text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-md font-semibold">● Live Stock Tracking</span>
+        <div class="relative h-64 w-full">
+          <canvas id="dailyTrendChart"></canvas>
+        </div>
       </div>
-      <div class="overflow-x-auto">
+
+      <!-- Top 5 Produk Share -->
+      <div class="lg:col-span-5 glass-card rounded-2xl p-6 flex flex-col justify-between">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="font-display font-bold text-base text-white flex items-center space-x-2">
+              <i class="fa-solid fa-chart-pie text-cyan-400"></i>
+              <span>Proporsi Produk Terlaris</span>
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">Komposisi 5 produk dengan kontribusi penjualan tertinggi</p>
+          </div>
+        </div>
+        <div class="relative h-64 w-full flex items-center justify-center">
+          <canvas id="topProductsChart"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- INVENTORY STOCK TRACKING SECTION -->
+    <section class="glass-card rounded-2xl p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 class="font-display font-bold text-lg text-white flex items-center space-x-2">
+            <i class="fa-solid fa-boxes-packing text-emerald-400"></i>
+            <span>Pantauan Inventori Stok (Stok Masuk, Terjual & Sisa)</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Sinkronisasi otomatis dengan Google Spreadsheet (Tab PRODUCTS) & Kasir POS</p>
+        </div>
+        <!-- Search bar for inventory -->
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+          <input id="inventorySearchInput" type="text" placeholder="Cari nama produk / SKU..." 
+                 oninput="filterInventoryTable()"
+                 class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition">
+        </div>
+      </div>
+
+      <!-- Inventory Table -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
         <table class="w-full text-left text-xs text-slate-300">
-          <thead class="bg-slate-800/40 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+          <thead class="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-800">
             <tr>
-              <th class="py-3 px-4">Kode SKU</th>
+              <th class="py-3 px-4">SKU / ID</th>
               <th class="py-3 px-4">Nama Produk</th>
               <th class="py-3 px-4">Kategori</th>
+              <th class="py-3 px-4 text-right">Harga Jual</th>
               <th class="py-3 px-4 text-center">Stok Masuk (In)</th>
               <th class="py-3 px-4 text-center">Terjual (Out)</th>
-              <th class="py-3 px-4 text-center">Sisa Stok</th>
-              <th class="py-3 px-4 text-right">Harga Jual</th>
+              <th class="py-3 px-4 text-center">Sisa Stok (Live)</th>
+              <th class="py-3 px-4 text-center">Status</th>
             </tr>
           </thead>
-          <tbody id="inventoryTableBody" class="divide-y divide-slate-800/60">
-            <tr><td colspan="7" class="py-6 text-center text-slate-500">Memuat data inventori stok...</td></tr>
+          <tbody id="inventoryTableBody" class="divide-y divide-slate-800/60 bg-slate-900/40 font-medium">
+            <tr>
+              <td colspan="8" class="text-center py-8 text-slate-500">Memuat data inventori...</td>
+            </tr>
           </tbody>
         </table>
       </div>
     </section>
 
-    <!-- GRAFIK VISUALISASI ANALITIK -->
-    <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-        <div class="flex justify-between items-center mb-6">
-          <div>
-            <h2 class="text-base font-bold text-white">Tren Omzet Penjualan</h2>
-            <p id="chartSubTitle" class="text-xs text-slate-400">Aktivitas 7 hari transaksi</p>
-          </div>
-          <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700">Daily</span>
-        </div>
-        <div class="h-64"><canvas id="dailyChartCanvas"></canvas></div>
-      </div>
-
-      <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-        <div class="flex justify-between items-center mb-6">
-          <div>
-            <h2 class="text-base font-bold text-white">Share Produk</h2>
-            <p class="text-xs text-slate-400">Distribusi kontribusi item</p>
-          </div>
-          <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700">Top 5</span>
-        </div>
-        <div class="h-64 flex items-center justify-center"><canvas id="productChartCanvas"></canvas></div>
-      </div>
-    </section>
-
-    <!-- TABEL TRANSAKSI KASIR -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-sm print-card">
-      <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+    <!-- LIVE TRANSACTIONS TABLE SECTION -->
+    <section class="glass-card rounded-2xl p-6 space-y-4">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 class="text-base font-bold text-white">Riwayat Transaksi Kasir Terkini</h2>
-          <p id="tableSubTitle" class="text-xs text-slate-400">Data live tersinkron otomatis dari Kasir POS & Form</p>
+          <h3 class="font-display font-bold text-lg text-white flex items-center space-x-2">
+            <i class="fa-solid fa-clock-rotate-left text-blue-400"></i>
+            <span>Riwayat Transaksi Kasir Real-Time</span>
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Daftar transaksi penjualan terbaru dari seluruh kasir cabang</p>
         </div>
-        <span id="trxCountBadge" class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md font-semibold">● Live Data</span>
+        <!-- Search bar for transactions -->
+        <div class="relative w-full sm:w-64">
+          <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+          <input id="trxSearchInput" type="text" placeholder="Cari No Trx / Kasir..." 
+                 oninput="filterTrxTable()"
+                 class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500 transition">
+        </div>
       </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-left text-sm text-slate-300">
-          <thead class="bg-slate-800/40 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+
+      <!-- Transactions Table -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-900 text-slate-400 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-800">
             <tr>
               <th class="py-3 px-4">No Transaksi</th>
-              <th class="py-3 px-4">Tanggal</th>
-              <th class="py-3 px-4">Pelanggan</th>
-              <th class="py-3 px-4">Produk</th>
-              <th class="py-3 px-4 text-center">Qty</th>
-              <th class="py-3 px-4 text-right">Total (IDR)</th>
+              <th class="py-3 px-4">Waktu</th>
               <th class="py-3 px-4">Cabang</th>
+              <th class="py-3 px-4">Kasir</th>
+              <th class="py-3 px-4 text-center">Metode Bayar</th>
+              <th class="py-3 px-4 text-right">Total Tagihan</th>
             </tr>
           </thead>
-          <tbody id="trxTableBody" class="divide-y divide-slate-800/60 text-xs">
-            <tr><td colspan="7" class="py-8 text-center text-slate-500">Memuat data transaksi...</td></tr>
+          <tbody id="trxTableBody" class="divide-y divide-slate-800/60 bg-slate-900/40">
+            <tr>
+              <td colspan="6" class="text-center py-8 text-slate-500">Memuat riwayat transaksi...</td>
+            </tr>
           </tbody>
         </table>
       </div>
@@ -211,241 +325,404 @@
 
   </main>
 
-  <footer class="border-t border-slate-800/60 py-6 text-center text-xs text-slate-500">
-    Vanguard Analytics Cloud Hybrid © 2026 · Multi-Branch Engine & Vanguard POS
+  <!-- FOOTER -->
+  <footer class="mt-16 text-center text-xs text-slate-500">
+    <p>Vanguard Analytics Cloud Hybrid • Multi-Tenant Enterprise Engine</p>
   </footer>
 
+  <!-- SCRIPT LOGIC -->
   <script>
-    let dailyChart = null;
-    let productChart = null;
-    let currentData = null;
-    let activeBranch = '';
+    // --- 1. GLOBAL STATE & TENANT DETECTOR ---
+    const urlParams = new URLSearchParams(window.location.search);
+    const currentTenant = urlParams.get('tenant') || 'COMP-001';
 
-    function parseLogoUrl(url) {
-      if (!url) return '';
-      url = url.trim();
-      const match = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
-      if (match && match[1]) {
-        return `https://drive.google.com/thumbnail?id=${match[1]}&sz=w200`;
-      }
-      return url;
+    let rawData = null;
+    let selectedBranch = 'ALL';
+    let dailyTrendChartInstance = null;
+    let topProductsChartInstance = null;
+
+    // Set POS Button Link to include active tenant
+    const posLinkBtn = document.getElementById('posLinkBtn');
+    if (posLinkBtn) {
+      posLinkBtn.href = `/pos.html?tenant=${encodeURIComponent(currentTenant)}`;
+    }
+    document.getElementById('tenantTag').innerText = `ID: ${currentTenant}`;
+
+    // --- 2. FORMATTERS ---
+    function formatRupiah(num) {
+      return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     }
 
-    const formatIdr = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
+    function formatDateTime(dateStr) {
+      if (!dateStr) return '-';
+      const d = new Date(dateStr);
+      return d.toLocaleDateString('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    }
 
-    async function loadData(branch = '') {
-      activeBranch = branch;
-      const urlParams = new URLSearchParams(window.location.search);
-      const tenantId = urlParams.get('tenant') || 'COMP-001';
+    // --- 3. FETCH DASHBOARD DATA ---
+    async function loadDashboardData() {
+      const refreshIcon = document.getElementById('refreshIcon');
+      if (refreshIcon) refreshIcon.classList.add('fa-spin');
 
       try {
-        let endpoint = `/api/dashboard/${tenantId}`;
-        if (branch) endpoint += `?branch=${encodeURIComponent(branch)}`;
+        const res = await fetch(`/api/dashboard/${encodeURIComponent(currentTenant)}`);
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        
+        rawData = await res.json();
 
-        const res = await fetch(endpoint);
-        const data = await res.json();
-        if (!data.success) throw new Error(data.message);
+        // Render company name
+        if (rawData.company && rawData.company.name) {
+          document.getElementById('companyNameText').innerText = rawData.company.name;
+        } else {
+          document.getElementById('companyNameText').innerText = 'Klien ' + currentTenant;
+        }
 
-        currentData = data;
-        renderHeader(data.company);
-        renderBranchTabs(data.branches || [], data.branchPerformance || [], branch);
-        renderKpis(data.kpi, branch);
-        renderInventory(data.inventory || []);
-        renderCharts(data.charts);
-        renderTransactions(data.transactions || []);
+        renderBranchPills();
+        applyBranchFilter();
 
       } catch (err) {
-        console.error('Error load data:', err);
+        console.error('Gagal mengambil data dashboard:', err);
+        alert('Gagal memuat data dashboard. Pastikan server aktif dan koneksi internet stabil.');
+      } finally {
+        if (refreshIcon) refreshIcon.classList.remove('fa-spin');
       }
     }
 
-    function renderHeader(comp) {
-      document.getElementById('companyName').innerText = comp.company_name || 'VARDHANA NIRWANA';
-      document.getElementById('tierBadge').innerText = comp.plan_tier || 'BASIC';
-      document.getElementById('statusBadge').innerText = comp.status || 'ACTIVE';
+    // --- 4. RENDER BRANCH PILLS ---
+    function renderBranchPills() {
+      const container = document.getElementById('branchPillsContainer');
+      const branches = rawData.branches || [];
 
-      let meta = `Tenant ID: ${comp.company_id || 'COMP-001'}`;
-      if (comp.address) meta += ` · ${comp.address}`;
-      if (comp.phone) meta += ` · 📞 ${comp.phone}`;
-      document.getElementById('companyMeta').innerText = meta;
-
-      const directLogo = parseLogoUrl(comp.logo_url);
-      const img = document.getElementById('logoImg');
-      const fallback = document.getElementById('logoFallback');
-
-      if (directLogo) {
-        img.src = directLogo;
-        img.classList.remove('hidden');
-        fallback.classList.add('hidden');
-        img.onerror = () => { img.classList.add('hidden'); fallback.classList.remove('hidden'); };
-      } else {
-        img.classList.add('hidden');
-        fallback.classList.remove('hidden');
-      }
-    }
-
-    function renderBranchTabs(branches, perfs, current) {
-      const container = document.getElementById('branchListGrid');
-      const badge = document.getElementById('activeFilterBadge');
-      badge.innerText = current ? `Cabang: ${current}` : 'Semua Cabang (Konsolidasi)';
-
-      let totalAllRevenue = 0;
-      perfs.forEach(p => totalAllRevenue += Number(p.total_revenue || 0));
-
-      const perfMap = {};
-      perfs.forEach(p => {
-        perfMap[p.branch_code] = {
-          rev: Number(p.total_revenue || 0),
-          trx: p.total_trx || 0
-        };
-      });
-
-      const isAllActive = !current;
-      let html = `
-        <div onclick="loadData('')" class="cursor-pointer p-4 rounded-xl border transition-all ${isAllActive ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/40 shadow-lg scale-[1.02]' : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-500 hover:bg-slate-800'}">
-          <div class="flex items-center justify-between">
-            <span class="text-xs font-bold ${isAllActive ? 'text-blue-300' : 'text-slate-200'}">🌐 SEMUA CABANG</span>
-            ${isAllActive ? '<span class="text-[9px] bg-blue-500 text-white font-bold px-1.5 py-0.5 rounded">AKTIF</span>' : ''}
-          </div>
-          <p class="text-[10px] text-slate-400 mt-1">Konsolidasi Total</p>
-          <p class="text-xs font-black text-emerald-400 mt-2">${formatIdr(totalAllRevenue)}</p>
-        </div>
-      `;
+      // Keep the "ALL" button, remove any previous dynamic branch buttons
+      const existingDynamicPills = container.querySelectorAll('.branch-pill-dynamic');
+      existingDynamicPills.forEach(p => p.remove());
 
       branches.forEach(b => {
-        const bCode = b.branch_code;
-        const bName = b.branch_name || bCode;
-        const isActive = (current === bCode || current === bName);
-        const data = perfMap[bCode] || perfMap[bName] || { rev: 0, trx: 0 };
+        const btn = document.createElement('button');
+        btn.className = `branch-pill branch-pill-dynamic px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition`;
+        btn.setAttribute('data-branch', b.branch_id);
+        btn.innerText = b.name;
+        btn.onclick = () => setBranchFilter(b.branch_id);
+        container.appendChild(btn);
+      });
+    }
 
-        html += `
-          <div onclick="loadData('${bCode}')" class="cursor-pointer p-4 rounded-xl border transition-all ${isActive ? 'bg-emerald-600/20 border-emerald-500 ring-2 ring-emerald-500/40 shadow-lg scale-[1.02]' : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-500 hover:bg-slate-800'}">
-            <div class="flex items-center justify-between">
-              <span class="text-xs font-bold truncate ${isActive ? 'text-emerald-300' : 'text-white'}">${bName}</span>
-              ${isActive ? '<span class="text-[9px] bg-emerald-500 text-white font-bold px-1.5 py-0.5 rounded">AKTIF</span>' : ''}
-            </div>
-            <p class="text-[10px] text-slate-400 mt-1 truncate">${b.city || 'Cabang'} · ${data.trx} Order</p>
-            <p class="text-xs font-black text-emerald-400 mt-2">${formatIdr(data.rev)}</p>
-          </div>
-        `;
+    function setBranchFilter(branchId) {
+      selectedBranch = branchId;
+
+      // Update button visual states
+      document.querySelectorAll('.branch-pill').forEach(btn => {
+        const bId = btn.getAttribute('data-branch');
+        if (bId === selectedBranch) {
+          btn.className = 'branch-pill px-4 py-1.5 rounded-xl text-xs font-semibold bg-emerald-500 text-slate-950 shadow-md transition';
+        } else {
+          btn.className = 'branch-pill px-4 py-1.5 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300 hover:bg-slate-700 transition';
+        }
       });
 
-      container.innerHTML = html;
-      document.getElementById('branchBadgeCount').innerText = `${branches.length} Cabang Terdaftar`;
+      applyBranchFilter();
     }
 
-    function renderKpis(kpi, branch) {
-      document.getElementById('kpiRevenue').innerText = formatIdr(kpi.totalRevenue);
-      document.getElementById('kpiTrx').innerText = (kpi.totalTrx || 0).toLocaleString('id-ID');
-      document.getElementById('kpiQty').innerText = `${(kpi.totalQty || 0).toLocaleString('id-ID')} pcs`;
-      document.getElementById('kpiTopProduct').innerText = kpi.topProduct || '-';
+    // --- 5. APPLY FILTER & UPDATE UI ---
+    function applyBranchFilter() {
+      if (!rawData) return;
 
-      const sub = branch ? `● Cabang: ${branch}` : '● Konsolidasi Semua Cabang';
-      document.getElementById('kpiFilterSub').innerText = sub;
-      document.getElementById('chartSubTitle').innerText = branch ? `Tren 7 hari untuk ${branch}` : 'Aktivitas 7 hari seluruh cabang';
-      document.getElementById('tableSubTitle').innerText = branch ? `Riwayat order khusus ${branch}` : 'Data live dari seluruh kasir cabang';
+      let filteredTrx = rawData.transactions || [];
+      if (selectedBranch !== 'ALL') {
+        filteredTrx = filteredTrx.filter(t => t.branch_id === selectedBranch);
+      }
+
+      // Calculate Metrics
+      let totalRevenue = 0;
+      let totalTrx = filteredTrx.length;
+      let totalQty = 0;
+      const productQtyMap = {};
+
+      filteredTrx.forEach(t => {
+        totalRevenue += Number(t.total_amount || 0);
+        if (Array.isArray(t.items)) {
+          t.items.forEach(item => {
+            const qty = Number(item.quantity || item.qty || 1);
+            totalQty += qty;
+            const pName = item.product_name || item.name || 'Produk';
+            productQtyMap[pName] = (productQtyMap[pName] || 0) + qty;
+          });
+        }
+      });
+
+      // Find Top Product
+      let topProductName = '-';
+      let maxQty = 0;
+      for (const [pName, qty] of Object.entries(productQtyMap)) {
+        if (qty > maxQty) {
+          maxQty = qty;
+          topProductName = pName;
+        }
+      }
+
+      // If no item array in transactions, fallback to branchPerformance or raw inventory
+      if (totalQty === 0 && rawData.inventory) {
+        totalQty = rawData.inventory.reduce((acc, curr) => acc + Number(curr.stock_sold || 0), 0);
+      }
+
+      // Update KPI Elements
+      document.getElementById('kpiRevenue').innerText = formatRupiah(totalRevenue);
+      document.getElementById('kpiTrx').innerText = totalTrx.toLocaleString('id-ID');
+      document.getElementById('kpiQty').innerText = `${totalQty.toLocaleString('id-ID')} pcs`;
+      document.getElementById('kpiTopProduct').innerText = topProductName;
+
+      // Update Tables & Charts
+      renderInventoryTable();
+      renderTrxTable(filteredTrx);
+      renderCharts(filteredTrx);
     }
 
-    // RENDER INVENTORI STOK REAL-TIME DI DASHBOARD
-    function renderInventory(inv) {
+    // --- 6. RENDER INVENTORY TABLE ---
+    function renderInventoryTable() {
       const tbody = document.getElementById('inventoryTableBody');
-      if (!inv || inv.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada data inventori terdaftar.</td></tr>';
+      const items = rawData.inventory || [];
+      const query = (document.getElementById('inventorySearchInput').value || '').toLowerCase();
+
+      const filtered = items.filter(item => {
+        const name = (item.product_name || '').toLowerCase();
+        const sku = (item.product_id || '').toLowerCase();
+        const cat = (item.category || '').toLowerCase();
+        return name.includes(query) || sku.includes(query) || cat.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-slate-500">Tidak ada produk yang cocok</td></tr>`;
         return;
       }
-      tbody.innerHTML = inv.map(p => {
-        const isLow = p.current_stock <= 10;
+
+      tbody.innerHTML = filtered.map(item => {
+        const stockIn = Number(item.stock_in || 0);
+        const stockSold = Number(item.stock_sold || 0);
+        const currentStock = Number(item.current_stock !== undefined ? item.current_stock : (stockIn - stockSold));
+
+        // Status badge
+        let statusBadge = '';
+        let stockBadgeColor = '';
+
+        if (currentStock <= 0) {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/30">Habis</span>';
+          stockBadgeColor = 'text-rose-400 font-bold';
+        } else if (currentStock <= 10) {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30">Menipis</span>';
+          stockBadgeColor = 'text-amber-400 font-semibold';
+        } else {
+          statusBadge = '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">Aman</span>';
+          stockBadgeColor = 'text-emerald-400 font-semibold';
+        }
+
         return `
-          <tr class="hover:bg-slate-800/40">
-            <td class="py-3 px-4 font-mono font-bold text-slate-400">${p.product_code}</td>
-            <td class="py-3 px-4 font-bold text-white">${p.product_name}</td>
-            <td class="py-3 px-4 text-slate-300">${p.category || '-'}</td>
-            <td class="py-3 px-4 text-center font-bold text-blue-400">${p.stock_in} pcs</td>
-            <td class="py-3 px-4 text-center font-bold text-rose-400">${p.stock_sold} pcs</td>
-            <td class="py-3 px-4 text-center">
-              <span class="px-2.5 py-0.5 rounded-full font-black text-xs ${isLow ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
-                ${p.current_stock} pcs
-              </span>
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono text-slate-400">${item.product_id || '-'}</td>
+            <td class="py-3 px-4 font-semibold text-slate-100">${item.product_name || '-'}</td>
+            <td class="py-3 px-4 text-slate-400">
+              <span class="bg-slate-800 px-2 py-0.5 rounded text-[11px]">${item.category || 'Umum'}</span>
             </td>
-            <td class="py-3 px-4 text-right font-black text-emerald-400">${formatIdr(p.price)}</td>
+            <td class="py-3 px-4 text-right font-mono text-slate-200">${formatRupiah(item.unit_price)}</td>
+            <td class="py-3 px-4 text-center font-mono text-slate-300 bg-slate-900/30">${stockIn}</td>
+            <td class="py-3 px-4 text-center font-mono text-rose-400 bg-slate-900/30">${stockSold}</td>
+            <td class="py-3 px-4 text-center font-mono ${stockBadgeColor} bg-slate-900/50">${currentStock}</td>
+            <td class="py-3 px-4 text-center">${statusBadge}</td>
           </tr>
         `;
       }).join('');
     }
 
-    function renderCharts(c) {
-      if (dailyChart) dailyChart.destroy();
-      if (productChart) productChart.destroy();
+    function filterInventoryTable() {
+      renderInventoryTable();
+    }
 
-      const dCtx = document.getElementById('dailyChartCanvas').getContext('2d');
-      dailyChart = new Chart(dCtx, {
+    // --- 7. RENDER TRANSACTIONS TABLE ---
+    function renderTrxTable(transactions) {
+      const tbody = document.getElementById('trxTableBody');
+      const query = (document.getElementById('trxSearchInput').value || '').toLowerCase();
+
+      const filtered = transactions.filter(t => {
+        const trxId = (t.trx_id || '').toLowerCase();
+        const cashier = (t.cashier_name || '').toLowerCase();
+        const branch = (t.branch_name || '').toLowerCase();
+        return trxId.includes(query) || cashier.includes(query) || branch.includes(query);
+      });
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center py-6 text-slate-500">Tidak ada riwayat transaksi</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = filtered.slice(0, 50).map(t => {
+        const method = (t.payment_method || 'CASH').toUpperCase();
+        let methodBadge = 'bg-slate-800 text-slate-300';
+        if (method === 'CASH') methodBadge = 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30';
+        else if (method === 'QRIS') methodBadge = 'bg-sky-500/10 text-sky-400 border border-sky-500/30';
+        else if (method.includes('DEBIT') || method.includes('TRANSFER')) methodBadge = 'bg-violet-500/10 text-violet-400 border border-violet-500/30';
+
+        return `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-3 px-4 font-mono font-bold text-slate-200">${t.trx_id}</td>
+            <td class="py-3 px-4 text-slate-400 text-[11px]">${formatDateTime(t.created_at)}</td>
+            <td class="py-3 px-4 font-medium text-slate-300">${t.branch_name || 'Cabang'}</td>
+            <td class="py-3 px-4 text-slate-400">${t.cashier_name || 'Kasir'}</td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold font-mono ${methodBadge}">${method}</span>
+            </td>
+            <td class="py-3 px-4 text-right font-mono font-bold text-emerald-400">${formatRupiah(t.total_amount)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function filterTrxTable() {
+      let filteredTrx = rawData ? (rawData.transactions || []) : [];
+      if (selectedBranch !== 'ALL') {
+        filteredTrx = filteredTrx.filter(t => t.branch_id === selectedBranch);
+      }
+      renderTrxTable(filteredTrx);
+    }
+
+    // --- 8. RENDER CHARTS ---
+    function renderCharts(filteredTrx) {
+      // 1. Daily Trend Data
+      const dailyMap = {};
+      filteredTrx.forEach(t => {
+        if (!t.created_at) return;
+        const dateKey = t.created_at.split('T')[0];
+        dailyMap[dateKey] = (dailyMap[dateKey] || 0) + Number(t.total_amount || 0);
+      });
+
+      const dates = Object.keys(dailyMap).sort().slice(-7);
+      const revenues = dates.map(d => dailyMap[d]);
+
+      // If no transaction data yet, fallback to dummy baseline so chart looks neat
+      const chartLabels = dates.length > 0 ? dates : ['Hari 1', 'Hari 2', 'Hari 3', 'Hari 4', 'Hari 5', 'Hari 6', 'Hari 7'];
+      const chartValues = dates.length > 0 ? revenues : [0, 0, 0, 0, 0, 0, 0];
+
+      // Build or Update Daily Trend Chart
+      const dailyCtx = document.getElementById('dailyTrendChart').getContext('2d');
+      if (dailyTrendChartInstance) dailyTrendChartInstance.destroy();
+
+      dailyTrendChartInstance = new Chart(dailyCtx, {
         type: 'line',
         data: {
-          labels: c.daily.labels,
+          labels: chartLabels,
           datasets: [{
-            label: 'Omzet',
-            data: c.daily.values,
-            borderColor: '#38bdf8',
-            backgroundColor: 'rgba(56, 189, 248, 0.1)',
+            label: 'Omset Penjualan',
+            data: chartValues,
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            borderWidth: 2.5,
             fill: true,
-            tension: 0.3
+            tension: 0.35,
+            pointBackgroundColor: '#10b981',
+            pointRadius: 4
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: function(ctx) { return ' ' + formatRupiah(ctx.parsed.y); }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: { color: '#94a3b8', font: { size: 10 } }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.05)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { size: 10 },
+                callback: function(v) {
+                  return 'Rp ' + (v >= 1000000 ? (v / 1000000) + 'Jt' : (v / 1000) + 'Rb');
+                }
+              }
+            }
+          }
+        }
       });
 
-      const pCtx = document.getElementById('productChartCanvas').getContext('2d');
-      productChart = new Chart(pCtx, {
+      // 2. Top Products Doughnut Chart
+      const productMap = {};
+      filteredTrx.forEach(t => {
+        if (Array.isArray(t.items)) {
+          t.items.forEach(i => {
+            const p = i.product_name || i.name || 'Produk';
+            productMap[p] = (productMap[p] || 0) + Number(i.quantity || i.qty || 1);
+          });
+        }
+      });
+
+      // Fallback: If transactions don't store items array, check inventory stock_sold
+      if (Object.keys(productMap).length === 0 && rawData.inventory) {
+        rawData.inventory.forEach(i => {
+          if (Number(i.stock_sold) > 0) {
+            productMap[i.product_name] = Number(i.stock_sold);
+          }
+        });
+      }
+
+      const topProductsSorted = Object.entries(productMap)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5);
+
+      const prodLabels = topProductsSorted.length > 0 ? topProductsSorted.map(p => p[0]) : ['Belum ada transaksi'];
+      const prodValues = topProductsSorted.length > 0 ? topProductsSorted.map(p => p[1]) : [1];
+
+      const topCtx = document.getElementById('topProductsChart').getContext('2d');
+      if (topProductsChartInstance) topProductsChartInstance.destroy();
+
+      topProductsChartInstance = new Chart(topCtx, {
         type: 'doughnut',
         data: {
-          labels: c.topProducts.labels,
+          labels: prodLabels,
           datasets: [{
-            data: c.topProducts.values,
-            backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899']
+            data: prodValues,
+            backgroundColor: [
+              '#10b981', '#06b6d4', '#6366f1', '#f59e0b', '#ec4899'
+            ],
+            borderWidth: 2,
+            borderColor: '#0f172a'
           }]
         },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, color: '#94a3b8' } } } }
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'bottom',
+              labels: {
+                color: '#cbd5e1',
+                font: { size: 11 },
+                boxWidth: 12,
+                padding: 12
+              }
+            }
+          },
+          cutout: '68%'
+        }
       });
     }
 
-    function renderTransactions(trxs) {
-      const tbody = document.getElementById('trxTableBody');
-      if (trxs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada transaksi untuk cabang ini.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = trxs.map(t => `
-        <tr class="hover:bg-slate-800/40">
-          <td class="py-3 px-4 font-mono font-bold text-blue-400">${t.trx_id}</td>
-          <td class="py-3 px-4 text-slate-400">${t.trx_date ? t.trx_date.split('T')[0] : '-'}</td>
-          <td class="py-3 px-4 font-semibold text-white">${t.customer_name || 'Umum'}</td>
-          <td class="py-3 px-4 text-slate-200">${t.product_name || '-'}</td>
-          <td class="py-3 px-4 text-center font-bold">${t.qty}</td>
-          <td class="py-3 px-4 text-right font-black text-emerald-400">${formatIdr(t.total_amount)}</td>
-          <td class="py-3 px-4 text-slate-400 text-[11px] font-semibold">${t.branch_name || t.branch_code}</td>
-        </tr>
-      `).join('');
-    }
-
-    function exportToCsv() {
-      if (!currentData || !currentData.transactions || currentData.transactions.length === 0) {
-        alert('Tidak ada data transaksi untuk diekspor!');
-        return;
-      }
-      const headers = ['No Trx', 'Tanggal', 'Pelanggan', 'Produk', 'Qty', 'Total IDR', 'Cabang'];
-      const rows = currentData.transactions.map(t => [
-        t.trx_id, t.trx_date ? t.trx_date.split('T')[0] : '', `"${t.customer_name || ''}"`, `"${t.product_name || ''}"`, t.qty, t.total_amount, `"${t.branch_name || ''}"`
-      ]);
-      const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-      const link = document.createElement('a');
-      link.setAttribute('href', encodeURI(csv));
-      link.setAttribute('download', `Vanguard_Laporan_${activeBranch || 'Semua_Cabang'}_${new Date().toISOString().slice(0,10)}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    }
-
-    loadData();
+    // --- 9. AUTO INITIALIZATION ---
+    window.addEventListener('DOMContentLoaded', () => {
+      loadDashboardData();
+    });
   </script>
+
 </body>
 </html>
