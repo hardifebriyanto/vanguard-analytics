@@ -131,7 +131,7 @@ app.post('/api/sync/config', async (req, res) => {
   }
 });
 
-// 3. Sync Transactions Import (Auto-Migrate Kolom Sales)
+// 3. Sync Transactions Import (Isi kolom transaction_no & trx_id)
 app.post('/api/sync/import', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -146,30 +146,34 @@ app.post('/api/sync/import', async (req, res) => {
       return res.json({ success: true, message: 'Tidak ada data transaksi.' });
     }
 
-    // Auto-migrate kolom tabel sales jika belum ada
+    // Auto-migrate & lemaskan constraint
+    try {
+      await client.query(`ALTER TABLE sales ALTER COLUMN transaction_no DROP NOT NULL;`);
+    } catch (e) {}
     try {
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS trx_id VARCHAR(50);`);
+      await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS transaction_no VARCHAR(50);`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS customer_name VARCHAR(100);`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS product_name VARCHAR(100);`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS qty NUMERIC DEFAULT 1;`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS total_amount NUMERIC DEFAULT 0;`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);`);
       await client.query(`ALTER TABLE sales ADD COLUMN IF NOT EXISTS trx_date DATE DEFAULT CURRENT_DATE;`);
-    } catch (migErr) {
-      console.log('Notice sales migration:', migErr.message);
-    }
+    } catch (migErr) {}
 
     for (const t of transactions) {
+      const code = t.trx_id || `TRX-${Date.now()}`;
       try {
         await client.query(`
-          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (company_id, trx_id) DO UPDATE
-          SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty, customer_name = EXCLUDED.customer_name, product_name = EXCLUDED.product_name;
+          INSERT INTO sales (
+            company_id, branch_code, trx_id, transaction_no, trx_date, customer_name, product_name, qty, total_amount
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9);
         `, [
           targetCompId,
           t.branch_code || 'BR-01',
-          t.trx_id,
+          code,
+          code,
           t.trx_date,
           t.customer_name,
           t.product_name,
@@ -177,20 +181,7 @@ app.post('/api/sync/import', async (req, res) => {
           t.total_amount || 0
         ]);
       } catch (sErr) {
-        // Fallback jika belum ada unique index pada (company_id, trx_id)
-        await client.query(`
-          INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
-        `, [
-          targetCompId,
-          t.branch_code || 'BR-01',
-          t.trx_id,
-          t.trx_date,
-          t.customer_name,
-          t.product_name,
-          t.qty || 1,
-          t.total_amount || 0
-        ]);
+        console.log('Insert row error:', sErr.message);
       }
     }
 
@@ -203,16 +194,12 @@ app.post('/api/sync/import', async (req, res) => {
   }
 });
 
-// 4. Dashboard Data API (Super Resilient & Live dari Neon DB)
+// 4. Dashboard Data API (Live dari Neon DB)
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
 
   try {
-    try {
-      await client.query(`ALTER TABLE modules ADD COLUMN IF NOT EXISTS is_enabled BOOLEAN DEFAULT true;`);
-    } catch (e) {}
-
     // A. Company
     let company = { company_id: companyId, company_name: 'PT Maju Jaya', plan_tier: 'ENTERPRISE' };
     try {
@@ -295,29 +282,26 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       }
     } catch (e) {}
 
-    // G. Recent Transactions (Live dari Neon DB)
+    // G. Recent Transactions (Query transaction_no & trx_id)
     let transactions = [];
     try {
       const trxRes = await client.query(`
-        SELECT trx_id, trx_date, customer_name, product_name, qty, total_amount, branch_code as branch_name
+        SELECT 
+          COALESCE(trx_id, transaction_no, 'TRX-001') as trx_id, 
+          trx_date, 
+          customer_name, 
+          product_name, 
+          qty, 
+          total_amount, 
+          branch_code as branch_name
         FROM sales
         WHERE company_id = $1
-        ORDER BY trx_date DESC, id DESC
+        ORDER BY trx_date DESC
         LIMIT 15
       `, [companyId]);
       transactions = trxRes.rows;
     } catch (e) {
-      // Fallback tanpa id
-      try {
-        const trxRes2 = await client.query(`
-          SELECT trx_id, trx_date, customer_name, product_name, qty, total_amount, branch_code as branch_name
-          FROM sales
-          WHERE company_id = $1
-          ORDER BY trx_date DESC
-          LIMIT 15
-        `, [companyId]);
-        transactions = trxRes2.rows;
-      } catch (e2) {}
+      console.log('Query trx error:', e.message);
     }
 
     res.json({
