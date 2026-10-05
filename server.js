@@ -1,13 +1,36 @@
 import express from 'express';
 import cors from 'cors';
 import pg from 'pg';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const publicDir = path.join(__dirname, 'public');
 
 const { Pool } = pg;
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(publicDir));
+
+// RUTE HALAMAN UTAMA & KASIR (Mencegah "Cannot GET")
+app.get('/', (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+
+app.get('/index.html', (req, res) => {
+  res.sendFile(path.join(publicDir, 'index.html'));
+});
+
+app.get('/pos.html', (req, res) => {
+  res.sendFile(path.join(publicDir, 'pos.html'));
+});
+
+app.get('/pos', (req, res) => {
+  res.sendFile(path.join(publicDir, 'pos.html'));
+});
 
 // Database Connection Pool
 const pool = new Pool({
@@ -163,7 +186,6 @@ app.post('/api/pos/sync-products', async (req, res) => {
 
       if (!pCode) continue;
 
-      // Cek apakah produk sudah ada berdasarkan product_code
       const check = await pool.query(
         `SELECT * FROM products WHERE company_id::VARCHAR = $1 AND product_code = $2`,
         [company_id, pCode]
