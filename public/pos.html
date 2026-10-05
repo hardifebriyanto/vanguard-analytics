@@ -3,39 +3,33 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Vanguard POS — Kasir Modern Multi-Cabang</title>
+  <title>Vanguard POS — Kasir Cloud</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-blue-600 selection:text-white">
 
-  <!-- HEADER POS -->
+  <!-- HEADER POS OTOMATIS MENYESUAIKAN NAMA USAHA KLIEN -->
   <header class="border-b border-slate-800 bg-slate-900/90 backdrop-blur-md sticky top-0 z-40 px-4 py-3">
     <div class="max-w-7xl mx-auto flex items-center justify-between">
       
-      <!-- Logo & Nama Bisnis -->
       <div class="flex items-center space-x-3">
-        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-500/20">
+        <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center font-black text-white text-lg shadow-md shadow-blue-500/20" id="posLogoText">
           V
         </div>
         <div>
           <div class="flex items-center space-x-2">
-            <h1 class="text-base font-bold text-white tracking-tight">VANGUARD POS</h1>
+            <h1 class="text-base font-bold text-white tracking-tight uppercase" id="posCompanyName">VANGUARD POS</h1>
             <span class="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ONLINE CLOUD</span>
           </div>
-          <p class="text-xs text-slate-400">VARDHANA NIRWANA · Point of Sale</p>
+          <p class="text-xs text-slate-400" id="posCompanyMeta">Multi-Branch Cloud POS</p>
         </div>
       </div>
 
-      <!-- Pemilih Cabang & Navigasi -->
       <div class="flex items-center space-x-3">
         <div class="flex items-center bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5">
           <span class="text-xs text-slate-400 mr-2">🏢 Outlet:</span>
           <select id="branchSelect" class="bg-transparent text-xs font-bold text-emerald-400 outline-none cursor-pointer">
-            <option value="Kantor Pusat Bandung" class="bg-slate-900 text-white">Kantor Pusat Bandung</option>
-            <option value="Summarecon" class="bg-slate-900 text-white">Summarecon</option>
-            <option value="Rancaekek" class="bg-slate-900 text-white">Rancaekek</option>
-            <option value="Majalaya" class="bg-slate-900 text-white">Majalaya</option>
-            <option value="Cibiru" class="bg-slate-900 text-white">Cibiru</option>
+            <option value="Pusat" class="bg-slate-900 text-white">Memuat Cabang...</option>
           </select>
         </div>
 
@@ -43,7 +37,7 @@
           <span>📦 Stok & Menu</span>
         </button>
 
-        <a href="/" target="_blank" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition-all">
+        <a id="dashboardLink" href="/" target="_blank" class="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg transition-all">
           <span>📊 Dashboard</span>
         </a>
       </div>
@@ -115,7 +109,6 @@
           </button>
         </div>
 
-        <!-- Kalkulator Tunai -->
         <div id="cashCalculator" class="bg-slate-800/50 p-3 rounded-xl border border-slate-800 space-y-2">
           <div class="flex items-center justify-between text-xs">
             <span class="text-slate-400">Nominal Uang:</span>
@@ -145,10 +138,9 @@
   <div id="receiptModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 shadow-2xl flex flex-col items-center">
       
-      <!-- KERTAS STRUK THERMAL PREVIEW DI LAYAR -->
       <div class="w-full bg-white text-black p-4 rounded-md font-mono text-[11px] leading-tight shadow-md border border-slate-200 space-y-2">
         <div class="text-center border-b border-dashed border-black pb-2">
-          <h2 class="font-black text-xs uppercase tracking-wider text-black">VARDHANA NIRWANA</h2>
+          <h2 class="font-black text-xs uppercase tracking-wider text-black" id="recCompanyName">NAMA TOKO</h2>
           <p class="text-[10px] text-gray-800" id="recOutlet">Outlet Cabang</p>
           <p class="text-[9px] text-gray-600" id="recDateTime">2026-10-05 12:00</p>
           <p class="text-[9px] text-gray-600 font-bold" id="recTrxId">TRX-0000</p>
@@ -173,11 +165,10 @@
 
         <div class="text-center text-[9px] text-gray-600 pt-1">
           <p>Terima Kasih Atas Kunjungan Anda!</p>
-          <p class="text-[8px] text-gray-400">Vanguard POS Cloud</p>
+          <p class="text-[8px] text-gray-400">Powered by Vanguard POS</p>
         </div>
       </div>
 
-      <!-- TOMBOL AKSI CETAK 1 LEMBAR & WHATSAPP -->
       <div class="w-full mt-4 space-y-2">
         <button onclick="printThermalReceiptExact()" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl transition-all shadow-md flex items-center justify-center space-x-1.5">
           <span>🖨️ Cetak Struk (Pasti 1 Lembar)</span>
@@ -268,7 +259,11 @@
   </div>
 
   <script>
-    const TENANT_ID = 'COMP-001';
+    // BACA TENANT DARI URL OTOMATIS: ?tenant=nama-usaha (Default: COMP-001)
+    const urlParams = new URLSearchParams(window.location.search);
+    const TENANT_ID = urlParams.get('tenant') || 'COMP-001';
+    let companyProfile = null;
+
     let products = [];
     let cart = [];
     let activeCategory = 'ALL';
@@ -277,12 +272,40 @@
 
     const formatIdr = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
 
-    function initBranchLock() {
-      const urlParams = new URLSearchParams(window.location.search);
-      const branchFromUrl = urlParams.get('branch');
-      if (branchFromUrl) {
-        const select = document.getElementById('branchSelect');
-        select.value = branchFromUrl;
+    // KONEKSIKAN LINK DASHBOARD SESUAI TENANT
+    document.getElementById('dashboardLink').href = `/?tenant=${TENANT_ID}`;
+
+    // LOAD INFO PERUSAHAAN & DAFTAR CABANG KHUSUS TENANT INI SECARA DINAMIS
+    async function fetchCompanyAndBranches() {
+      try {
+        const res = await fetch(`/api/dashboard/${TENANT_ID}`);
+        const data = await res.json();
+        if (data.success) {
+          companyProfile = data.company;
+          const cName = data.company?.company_name || TENANT_ID;
+          document.getElementById('posCompanyName').innerText = cName;
+          document.getElementById('posLogoText').innerText = cName.charAt(0).toUpperCase();
+          document.getElementById('recCompanyName').innerText = cName;
+          document.getElementById('posCompanyMeta').innerText = `Tenant ID: ${TENANT_ID}`;
+
+          // RENDER PILIHAN CABANG MILIK TENANT INI SAJA
+          const select = document.getElementById('branchSelect');
+          if (data.branches && data.branches.length > 0) {
+            select.innerHTML = data.branches.map(b => `
+              <option value="${b.branch_name || b.branch_code}" class="bg-slate-900 text-white">${b.branch_name || b.branch_code}</option>
+            `).join('');
+          } else {
+            select.innerHTML = '<option value="Pusat" class="bg-slate-900 text-white">Outlet Utama</option>';
+          }
+
+          // Cek jika ada ?branch= di URL
+          const branchFromUrl = urlParams.get('branch');
+          if (branchFromUrl) {
+            select.value = branchFromUrl;
+          }
+        }
+      } catch (err) {
+        console.error('Error load tenant profile:', err);
       }
     }
 
@@ -588,10 +611,10 @@
       document.getElementById('receiptModal').classList.add('hidden');
     }
 
-    // TEKNOLOGI CETAK IFRAME TERISOLASI: DIJAMIN 100% PASTI 1 LEMBAR PAS 58mm
     function printThermalReceiptExact() {
       if (!lastCompletedTrx) return;
       const trx = lastCompletedTrx;
+      const storeName = companyProfile?.company_name || 'VARDHANA NIRWANA';
 
       let iframe = document.getElementById('receiptIframe');
       if (!iframe) {
@@ -621,26 +644,12 @@
         <head>
           <title>Struk - ${trx.trx_id}</title>
           <style>
-            @page {
-              size: 58mm auto;
-              margin: 0;
-            }
+            @page { size: 58mm auto; margin: 0; }
             html, body {
-              width: 58mm;
-              margin: 0;
-              padding: 0;
-              background: #fff;
-              color: #000;
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 11px;
-              line-height: 1.25;
+              width: 58mm; margin: 0; padding: 0; background: #fff; color: #000;
+              font-family: 'Courier New', Courier, monospace; font-size: 11px; line-height: 1.25;
             }
-            .receipt-box {
-              width: 58mm;
-              max-width: 58mm;
-              padding: 4mm 3mm;
-              box-sizing: border-box;
-            }
+            .receipt-box { width: 58mm; max-width: 58mm; padding: 4mm 3mm; box-sizing: border-box; }
             .text-center { text-align: center; }
             .bold { font-weight: bold; }
             .dashed { border-top: 1px dashed #000; margin: 5px 0; }
@@ -650,36 +659,20 @@
         <body>
           <div class="receipt-box">
             <div class="text-center">
-              <div class="bold" style="font-size: 12px; letter-spacing: 0.5px;">VARDHANA NIRWANA</div>
+              <div class="bold" style="font-size: 12px; letter-spacing: 0.5px;">${storeName}</div>
               <div style="font-size: 10px;">Outlet: ${trx.branch}</div>
               <div style="font-size: 9px; color: #444;">${trx.date}</div>
               <div style="font-size: 9px; font-weight: bold;">No: ${trx.trx_id}</div>
             </div>
-            
             <div class="dashed"></div>
-            
             <div>${itemsHtml}</div>
-            
             <div class="dashed"></div>
-            
-            <div class="row bold">
-              <span>TOTAL:</span>
-              <span>${formatIdr(trx.total)}</span>
-            </div>
-            <div class="row" style="font-size: 10px;">
-              <span>Bayar (${trx.method}):</span>
-              <span>${formatIdr(trx.paid)}</span>
-            </div>
-            <div class="row bold" style="font-size: 10px;">
-              <span>Kembali:</span>
-              <span>${formatIdr(trx.change)}</span>
-            </div>
-            
+            <div class="row bold"><span>TOTAL:</span><span>${formatIdr(trx.total)}</span></div>
+            <div class="row" style="font-size: 10px;"><span>Bayar (${trx.method}):</span><span>${formatIdr(trx.paid)}</span></div>
+            <div class="row bold" style="font-size: 10px;"><span>Kembali:</span><span>${formatIdr(trx.change)}</span></div>
             <div class="dashed"></div>
-            
             <div class="text-center" style="font-size: 9px; margin-top: 5px;">
-              Terima Kasih Atas Kunjungan Anda!<br>
-              Powered by Vanguard POS
+              Terima Kasih Atas Kunjungan Anda!<br>Powered by Vanguard POS
             </div>
           </div>
         </body>
@@ -695,13 +688,14 @@
 
     function shareToWhatsApp() {
       if (!lastCompletedTrx) return;
+      const storeName = companyProfile?.company_name || 'VARDHANA NIRWANA';
       const phone = document.getElementById('waPhoneInput').value.trim();
       if (!phone) {
         alert('Masukkan nomor WhatsApp (contoh: 08123456789)');
         return;
       }
 
-      let text = `*STRUK PEMBELIAN - VARDHANA NIRWANA*\n`;
+      let text = `*STRUK PEMBELIAN - ${storeName}*\n`;
       text += `Outlet: ${lastCompletedTrx.branch}\n`;
       text += `No: ${lastCompletedTrx.trx_id} | ${lastCompletedTrx.date}\n`;
       text += `--------------------------------\n`;
@@ -775,7 +769,7 @@
       `).join('');
     }
 
-    initBranchLock();
+    fetchCompanyAndBranches();
     fetchProducts();
   </script>
 </body>
