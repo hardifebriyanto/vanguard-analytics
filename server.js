@@ -15,19 +15,19 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
+// KONEKSI NEON CLOUD DATABASE (POOLING AMAN UNTUK VERCEL)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_u3R7sCfltVvd@ep-dry-frog-a10j192k-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require',
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000
 });
 
-// AUTO MIGRATION DATABASE NEON CLOUD
-async function initDb() {
-  let client;
+// AUTO MIGRATION: Menjamin semua tabel & kolom otomatis ada tanpa error
+async function ensureTables() {
   try {
-    client = await pool.connect();
-    
-    // 1. Tabel Companies
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS companies (
         company_id VARCHAR(50) PRIMARY KEY,
         company_name VARCHAR(255) NOT NULL,
@@ -42,50 +42,35 @@ async function initDb() {
       );
     `);
 
-    // 2. Tabel Branches
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS branches (
         id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+        company_id VARCHAR(50) NOT NULL,
         branch_id VARCHAR(50),
         branch_code VARCHAR(50) NOT NULL,
         branch_name VARCHAR(255) NOT NULL,
         city VARCHAR(100),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      ALTER TABLE branches ALTER COLUMN branch_id DROP NOT NULL;
-    `).catch(() => {});
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_branches_code ON branches(company_id, branch_code);`).catch(() => {});
 
-    await client.query(`
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_branch_company_code') THEN
-          ALTER TABLE branches ADD CONSTRAINT unique_branch_company_code UNIQUE (company_id, branch_code);
-        END IF;
-      END $$;
-    `).catch(() => {});
-
-    // 3. Tabel Modules
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS modules (
         id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+        company_id VARCHAR(50) NOT NULL,
         module_code VARCHAR(50) NOT NULL,
         module_name VARCHAR(100) NOT NULL,
         is_enabled BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_company_module') THEN
-          ALTER TABLE modules ADD CONSTRAINT unique_company_module UNIQUE (company_id, module_code);
-        END IF;
-      END $$;
-    `).catch(() => {});
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_modules_code ON modules(company_id, module_code);`).catch(() => {});
 
-    // 4. Tabel Sales Transactions
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS sales_transactions (
         id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+        company_id VARCHAR(50) NOT NULL,
         trx_id VARCHAR(100) NOT NULL,
         trx_date DATE NOT NULL,
         customer_name VARCHAR(255),
@@ -99,18 +84,13 @@ async function initDb() {
         branch_name VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_company_trx') THEN
-          ALTER TABLE sales_transactions ADD CONSTRAINT unique_company_trx UNIQUE (company_id, trx_id);
-        END IF;
-      END $$;
-    `).catch(() => {});
+    `);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_trx_id ON sales_transactions(company_id, trx_id);`).catch(() => {});
 
-    // 5. Tabel Products (DILENGKAPI AUTO-ALTER JIKA TABEL SUDAH ADA SEBELUMNYA)
-    await client.query(`
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
-        company_id VARCHAR(50) NOT NULL REFERENCES companies(company_id) ON DELETE CASCADE,
+        company_id VARCHAR(50) NOT NULL,
         product_code VARCHAR(50) NOT NULL,
         product_name VARCHAR(255) NOT NULL,
         category VARCHAR(100) DEFAULT 'Umum',
@@ -123,68 +103,56 @@ async function initDb() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC(15,2) DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in INTEGER DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold INTEGER DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock INTEGER DEFAULT 0;
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Umum';
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS unit VARCHAR(20) DEFAULT 'pcs';
-      ALTER TABLE products ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
-      DO $$ BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'unique_product_company_code') THEN
-          ALTER TABLE products ADD CONSTRAINT unique_product_company_code UNIQUE (company_id, product_code);
-        END IF;
-      END $$;
     `);
 
-    console.log('Database tables & columns migration completed.');
+    // Pastikan kolom-kolom baru selalu ada
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS cost_price NUMERIC(15,2) DEFAULT 0;`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in INTEGER DEFAULT 0;`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold INTEGER DEFAULT 0;`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock INTEGER DEFAULT 0;`).catch(() => {});
+    await pool.query(`ALTER TABLE products ADD COLUMN IF NOT EXISTS category VARCHAR(100) DEFAULT 'Umum';`).catch(() => {});
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_products_code ON products(company_id, product_code);`).catch(() => {});
   } catch (err) {
-    console.error('initDb error:', err.message);
-  } finally {
-    if (client) client.release();
+    console.error('ensureTables warning:', err.message);
   }
 }
-initDb();
+ensureTables();
 
 // 1. ENDPOINT KOSONGKAN PRODUK
 app.post('/api/pos/reset-products', async (req, res) => {
   const { company_id = 'COMP-001' } = req.body;
   try {
     await pool.query('DELETE FROM products WHERE company_id = $1', [company_id]);
-    res.json({ success: true, message: 'Semua produk berhasil dikosongkan menjadi nol.' });
+    res.json({ success: true, message: 'Semua produk telah dikosongkan menjadi 0.' });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 });
 
-// 2. ENDPOINT RESET TRANSAKSI
+// 2. ENDPOINT KOSONGKAN TRANSAKSI
 app.post('/api/reset-sales', async (req, res) => {
   const { company_id = 'COMP-001' } = req.body;
   try {
     await pool.query('DELETE FROM sales_transactions WHERE company_id = $1', [company_id]);
     await pool.query('UPDATE products SET stock_sold = 0, current_stock = stock_in WHERE company_id = $1', [company_id]);
-    res.json({ success: true, message: 'Semua riwayat transaksi berhasil di-reset menjadi 0!' });
+    res.json({ success: true, message: 'Semua data transaksi di-reset menjadi 0!' });
   } catch (err) {
     res.json({ success: false, message: err.message });
   }
 });
 
-// 3. SINKRONISASI MASTER & TAB PRODUCTS DARI GOOGLE APPS SCRIPT
+// 3. SINKRONISASI DATA DARI GOOGLE APPS SCRIPT (Tab PRODUCTS, BRANCHES, dll)
 app.post('/api/sync/config', async (req, res) => {
-  let client;
   try {
-    client = await pool.connect();
     const { company, modules, branches, products } = req.body;
     if (!company || !company.company_id) {
-      return res.json({ success: false, message: 'Data company_id tidak ditemukan' });
+      return res.json({ success: false, message: 'Data company tidak valid' });
     }
 
-    await client.query('BEGIN');
+    await ensureTables();
 
-    // Upsert Perusahaan
-    await client.query(`
+    // Upsert Profil Perusahaan
+    await pool.query(`
       INSERT INTO companies (company_id, company_name, plan_tier, logo_url, address, phone, email, status, updated_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
       ON CONFLICT (company_id) DO UPDATE SET
@@ -211,7 +179,7 @@ app.post('/api/sync/config', async (req, res) => {
     if (Array.isArray(branches) && branches.length > 0) {
       for (const b of branches) {
         if (!b.branch_code) continue;
-        await client.query(`
+        await pool.query(`
           INSERT INTO branches (company_id, branch_id, branch_code, branch_name, city)
           VALUES ($1, $2, $3, $4, $5)
           ON CONFLICT (company_id, branch_code) DO UPDATE SET
@@ -232,7 +200,7 @@ app.post('/api/sync/config', async (req, res) => {
     if (Array.isArray(modules) && modules.length > 0) {
       for (const m of modules) {
         if (!m.module_code) continue;
-        await client.query(`
+        await pool.query(`
           INSERT INTO modules (company_id, module_code, module_name, is_enabled)
           VALUES ($1, $2, $3, $4)
           ON CONFLICT (company_id, module_code) DO UPDATE SET
@@ -255,7 +223,7 @@ app.post('/api/sync/config', async (req, res) => {
         const price = Number(p.price || 0);
         const costPrice = Number(p.cost_price || 0);
 
-        await client.query(`
+        await pool.query(`
           INSERT INTO products (company_id, product_code, product_name, category, price, cost_price, stock_in, current_stock, unit, updated_at)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $7, 'pcs', CURRENT_TIMESTAMP)
           ON CONFLICT (company_id, product_code) DO UPDATE SET
@@ -278,16 +246,10 @@ app.post('/api/sync/config', async (req, res) => {
       }
     }
 
-    await client.query('COMMIT');
-    res.json({ success: true, message: 'Data Master & Produk dari Spreadsheet berhasil disinkronkan!' });
+    return res.json({ success: true, message: 'Data Master & Produk dari Spreadsheet berhasil disinkronkan!' });
   } catch (err) {
-    if (client) {
-      try { await client.query('ROLLBACK'); } catch (_) {}
-    }
-    console.error('Error sync config:', err);
-    res.json({ success: false, message: 'Gagal sync: ' + err.message });
-  } finally {
-    if (client) client.release();
+    console.error('Sync config error:', err);
+    return res.json({ success: false, message: 'Gagal sync: ' + err.message });
   }
 });
 
@@ -305,7 +267,7 @@ app.get('/api/pos/products/:companyId', async (req, res) => {
   }
 });
 
-// 5. TAMBAH/EDIT PRODUK DARI KASIR MANUAL
+// 5. TAMBAH / UPDATE PRODUK DARI KASIR
 app.post('/api/pos/products', async (req, res) => {
   const { company_id = 'COMP-001', product_code, product_name, category, price, cost_price = 0, stock_in = 0 } = req.body;
   try {
@@ -328,15 +290,12 @@ app.post('/api/pos/products', async (req, res) => {
   }
 });
 
-// 6. CHECKOUT KASIR
+// 6. CHECKOUT TRANSAKSI KASIR
 app.post('/api/pos/checkout', async (req, res) => {
-  let client;
   try {
-    client = await pool.connect();
     const { company_id = 'COMP-001', branch_name, customer_name, payment_method, items } = req.body;
     if (!items || items.length === 0) return res.json({ success: false, message: 'Item pesanan kosong' });
 
-    await client.query('BEGIN');
     const trxId = 'TRX-' + Date.now().toString().slice(-6);
     const today = new Date().toISOString().split('T')[0];
 
@@ -345,27 +304,21 @@ app.post('/api/pos/checkout', async (req, res) => {
       const price = Number(item.price || 0);
       const total = qty * price;
 
-      await client.query(`
+      await pool.query(`
         INSERT INTO sales_transactions (company_id, trx_id, trx_date, customer_name, product_name, category, qty, price, total_amount, payment_method, branch_name, branch_code)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
       `, [company_id, `${trxId}-${item.product_code}`, today, customer_name || 'Umum', item.product_name, 'POS', qty, price, total, payment_method, branch_name]);
 
-      await client.query(`
+      await pool.query(`
         UPDATE products 
         SET stock_sold = stock_sold + $1, current_stock = current_stock - $1, updated_at = CURRENT_TIMESTAMP
         WHERE company_id = $2 AND product_code = $3
       `, [qty, company_id, item.product_code]);
     }
 
-    await client.query('COMMIT');
-    res.json({ success: true, trx_id: trxId, message: 'Transaksi berhasil dicatat ke cloud' });
+    res.json({ success: true, trx_id: trxId, message: 'Transaksi berhasil disimpan ke cloud' });
   } catch (err) {
-    if (client) {
-      try { await client.query('ROLLBACK'); } catch (_) {}
-    }
     res.json({ success: false, message: err.message });
-  } finally {
-    if (client) client.release();
   }
 });
 
@@ -475,4 +428,9 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
 app.get('/pos', (req, res) => res.sendFile(path.join(__dirname, 'public', 'pos.html')));
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+}
+
+// INI KUNCI UTAMA AGAR VERCEL TIDAK FUNCTION_INVOCATION_FAILED:
+export default app;
