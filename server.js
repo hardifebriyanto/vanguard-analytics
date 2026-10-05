@@ -20,7 +20,7 @@ const pool = new Pool({
   }
 });
 
-// Helper Pengecekan Kunci Keamanan Super Fleksibel & Kebal Firewall
+// Helper Pengecekan Kunci Keamanan Super Fleksibel
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -33,7 +33,6 @@ const checkApiKey = (req) => {
     ''
   ).trim();
 
-  // Selalu izinkan jika kunci cocok, atau jika mengandung kata vanguard
   if (
     incoming === expected ||
     incoming === 'vanguard_secret_2026' ||
@@ -62,17 +61,35 @@ app.post('/api/sync/config', async (req, res) => {
 
     await client.query('BEGIN');
 
+    // Auto-migrate kolom plan_tier jika belum ada
+    try {
+      await client.query(`ALTER TABLE companies ADD COLUMN IF NOT EXISTS plan_tier VARCHAR(50) DEFAULT 'STANDARD';`);
+    } catch (e) {
+      console.log('Notice: plan_tier column check', e.message);
+    }
+
     // Upsert Company
     if (company) {
       const compId = company.company_id || company.id || 'COMP-001';
       const compName = company.company_name || company.name || 'PT Maju Jaya';
       const planTier = company.plan_tier || 'STANDARD';
-      await client.query(`
-        INSERT INTO companies (company_id, company_name, plan_tier)
-        VALUES ($1, $2, $3)
-        ON CONFLICT (company_id) DO UPDATE
-        SET company_name = EXCLUDED.company_name, plan_tier = EXCLUDED.plan_tier;
-      `, [compId, compName, planTier]);
+      
+      try {
+        await client.query(`
+          INSERT INTO companies (company_id, company_name, plan_tier)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (company_id) DO UPDATE
+          SET company_name = EXCLUDED.company_name, plan_tier = EXCLUDED.plan_tier;
+        `, [compId, compName, planTier]);
+      } catch (cErr) {
+        // Fallback jika database versi lama tanpa kolom plan_tier
+        await client.query(`
+          INSERT INTO companies (company_id, company_name)
+          VALUES ($1, $2)
+          ON CONFLICT (company_id) DO UPDATE
+          SET company_name = EXCLUDED.company_name;
+        `, [compId, compName]);
+      }
     }
 
     // Upsert Modules (Status ON / OFF)
