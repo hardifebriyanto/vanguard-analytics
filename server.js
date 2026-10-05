@@ -17,7 +17,7 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Auto-Migration Kolom Profil
+// Auto-Migration Kolom Profil & Relaksasi Constraint
 async function initDb() {
   const client = await pool.connect();
   try {
@@ -28,12 +28,20 @@ async function initDb() {
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS email VARCHAR(100);
       ALTER TABLE companies ADD COLUMN IF NOT EXISTS status VARCHAR(50);
 
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_id VARCHAR(50);
+      ALTER TABLE branches ADD COLUMN IF NOT EXISTS branch_code VARCHAR(50);
+      ALTER TABLE branches ALTER COLUMN branch_id DROP NOT NULL;
+
+      ALTER TABLE modules ADD COLUMN IF NOT EXISTS module_id VARCHAR(50);
+      ALTER TABLE modules ADD COLUMN IF NOT EXISTS module_code VARCHAR(50);
+      ALTER TABLE modules ALTER COLUMN module_id DROP NOT NULL;
+
       DELETE FROM sales WHERE company_id = 'COMP-002';
       DELETE FROM modules WHERE company_id = 'COMP-002';
       DELETE FROM branches WHERE company_id = 'COMP-002';
       DELETE FROM companies WHERE company_id = 'COMP-002';
     `);
-    console.log('✅ DB Siap: COMP-002 dibersihkan & profil aktif.');
+    console.log('✅ DB Siap: Cabang & Profil sinkron.');
   } catch (err) {
     console.warn('DB Init Log:', err.message);
   } finally {
@@ -42,7 +50,7 @@ async function initDb() {
 }
 initDb();
 
-// Cek Kunci API Keamanan Fleksibel
+// Cek Kunci API Keamanan
 const checkApiKey = (req) => {
   const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
   const incoming = (
@@ -61,7 +69,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. Sync Master Config (SELECT 1 Universal - Anti Error Kolom ID)
+// 2. Sync Master Config (Mengisi branch_id & branch_code Sekaligus)
 app.post('/api/sync/config', async (req, res) => {
   if (!checkApiKey(req)) {
     return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
@@ -107,38 +115,44 @@ app.post('/api/sync/config', async (req, res) => {
           String(m.is_enabled).trim().toUpperCase() === 'ON' ||
           String(m.is_enabled).trim().toUpperCase() === 'AKTIF'
         );
+        const mCode = String(m.module_code || m.module_id || 'MOD_SALES').trim();
+        const mName = String(m.module_name || mCode).trim();
 
-        const checkMod = await client.query('SELECT 1 FROM modules WHERE company_id = $1 AND module_code = $2', [m.company_id, m.module_code]);
+        const checkMod = await client.query('SELECT 1 FROM modules WHERE company_id = $1 AND (module_code = $2 OR module_id = $2)', [m.company_id, mCode]);
         if (checkMod.rows.length > 0) {
           await client.query(`
             UPDATE modules
-            SET module_name = $1, is_enabled = $2
-            WHERE company_id = $3 AND module_code = $4
-          `, [m.module_name, isEnabled, m.company_id, m.module_code]);
+            SET module_name = $1, is_enabled = $2, module_code = $3, module_id = $3
+            WHERE company_id = $4 AND (module_code = $5 OR module_id = $5)
+          `, [mName, isEnabled, mCode, m.company_id, mCode]);
         } else {
           await client.query(`
-            INSERT INTO modules (company_id, module_code, module_name, is_enabled)
-            VALUES ($1, $2, $3, $4)
-          `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+            INSERT INTO modules (module_id, company_id, module_code, module_name, is_enabled)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [mCode, m.company_id, mCode, mName, isEnabled]);
         }
       }
     }
 
-    // C. Simpan Cabang (Multi-Cabang)
+    // C. Simpan Cabang (Mengisi branch_id & branch_code agar tidak NULL)
     if (branches && Array.isArray(branches)) {
       for (const b of branches) {
-        const checkBr = await client.query('SELECT 1 FROM branches WHERE company_id = $1 AND branch_code = $2', [b.company_id, b.branch_code]);
+        const bCode = String(b.branch_code || b.branch_id || 'BR-01').trim();
+        const bName = String(b.branch_name || bCode).trim();
+        const bCity = String(b.city || '-').trim();
+
+        const checkBr = await client.query('SELECT 1 FROM branches WHERE company_id = $1 AND (branch_code = $2 OR branch_id = $2)', [b.company_id, bCode]);
         if (checkBr.rows.length > 0) {
           await client.query(`
             UPDATE branches
-            SET branch_name = $1, city = $2
-            WHERE company_id = $3 AND branch_code = $4
-          `, [b.branch_name, b.city, b.company_id, b.branch_code]);
+            SET branch_name = $1, city = $2, branch_code = $3, branch_id = $3
+            WHERE company_id = $4 AND (branch_code = $5 OR branch_id = $5)
+          `, [bName, bCity, bCode, b.company_id, bCode]);
         } else {
           await client.query(`
-            INSERT INTO branches (company_id, branch_code, branch_name, city)
-            VALUES ($1, $2, $3, $4)
-          `, [b.company_id, b.branch_code, b.branch_name, b.city]);
+            INSERT INTO branches (branch_id, company_id, branch_code, branch_name, city)
+            VALUES ($1, $2, $3, $4, $5)
+          `, [bCode, b.company_id, bCode, bName, bCity]);
         }
       }
     }
@@ -217,9 +231,9 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
     };
 
     const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1 ORDER BY module_code ASC', [companyId]);
-    const branchRes = await client.query('SELECT branch_code, branch_name, city FROM branches WHERE company_id = $1 ORDER BY branch_code ASC', [companyId]);
+    const branchRes = await client.query('SELECT COALESCE(branch_code, branch_id) as branch_code, branch_name, city FROM branches WHERE company_id = $1 ORDER BY 1 ASC', [companyId]);
 
-    // KPI Sales Universal COUNT(*)
+    // KPI Sales Universal
     let kpiSql = `SELECT COALESCE(SUM(total_amount), 0) as total_revenue, COUNT(*) as total_trx, COALESCE(SUM(qty), 0) as total_qty FROM sales WHERE company_id = $1`;
     const kpiParams = [companyId];
     if (branch) { kpiSql += ` AND branch_code = $2`; kpiParams.push(branch); }
