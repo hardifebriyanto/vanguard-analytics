@@ -23,7 +23,6 @@
   <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
       
-      <!-- LOGO PERUSAHAAN & NAMA -->
       <div class="flex items-center space-x-4">
         <div class="w-12 h-12 rounded-xl flex items-center justify-center overflow-hidden bg-slate-800 border border-slate-700 shadow-md">
           <span id="logoFallback" class="font-black text-xl text-blue-400">V</span>
@@ -39,25 +38,20 @@
         </div>
       </div>
 
-      <!-- ALAT CETAK, EXPORT & TOMBOL KASIR POS -->
       <div class="flex items-center space-x-3 no-print">
-        <!-- Status Filter Aktif -->
         <div class="hidden sm:flex items-center bg-slate-800/80 border border-slate-700 rounded-lg px-3 py-1.5 space-x-2">
           <span class="text-xs text-slate-400">Laporan:</span>
           <span id="activeFilterBadge" class="text-xs font-bold text-emerald-400">Semua Cabang (Konsolidasi)</span>
         </div>
 
-        <!-- TOMBOL BUKA APLIKASI KASIR VANGUARD POS -->
         <a href="/pos.html" target="_blank" class="px-3.5 py-1.5 text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-all shadow-md shadow-blue-500/20 flex items-center space-x-1.5">
           <span>📱 Buka Kasir POS</span>
         </a>
 
-        <!-- Tombol Cetak PDF -->
         <button onclick="window.print()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-all shadow-sm">
           🖨️ Cetak PDF
         </button>
 
-        <!-- Tombol Export Excel -->
         <button onclick="exportToCsv()" class="px-3 py-1.5 text-xs font-medium bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg transition-all shadow-sm">
           📊 Export Excel
         </button>
@@ -69,7 +63,7 @@
   <!-- KONTEN DASHBOARD UTAMA -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-    <!-- PANEL NAVIGASI CABANG INTERAKTIF (BISA DIKLIK) -->
+    <!-- PANEL NAVIGASI CABANG -->
     <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
       <div class="flex items-center justify-between mb-4">
         <div>
@@ -80,14 +74,10 @@
         </div>
         <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700" id="branchBadgeCount">5 Cabang Terdata</span>
       </div>
-
-      <!-- GRID TOMBOL CABANG INTERAKTIF -->
-      <div id="branchListGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        <!-- Render otomatis via JS -->
-      </div>
+      <div id="branchListGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
     </section>
 
-    <!-- KPI CARDS (4 METRICS) -->
+    <!-- KPI CARDS -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
       <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
         <div class="flex justify-between items-start">
@@ -134,6 +124,37 @@
       </div>
     </section>
 
+    <!-- PANEL INVENTORI: STOK MASUK, TERJUAL & SISA STOK -->
+    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <span>📦 Pantauan Inventori Stok (Stok Masuk, Terjual & Sisa)</span>
+          </h2>
+          <p class="text-xs text-slate-400">Data live stok produk langsung terpotong saat kasir melakukan transaksi</p>
+        </div>
+        <span class="text-xs text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-md font-semibold">● Live Stock Tracking</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-800/40 text-[11px] uppercase tracking-wider text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="py-3 px-4">Kode SKU</th>
+              <th class="py-3 px-4">Nama Produk</th>
+              <th class="py-3 px-4">Kategori</th>
+              <th class="py-3 px-4 text-center">Stok Masuk (In)</th>
+              <th class="py-3 px-4 text-center">Terjual (Out)</th>
+              <th class="py-3 px-4 text-center">Sisa Stok</th>
+              <th class="py-3 px-4 text-right">Harga Jual</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryTableBody" class="divide-y divide-slate-800/60">
+            <tr><td colspan="7" class="py-6 text-center text-slate-500">Memuat data inventori stok...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- GRAFIK VISUALISASI ANALITIK -->
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
@@ -157,18 +178,6 @@
         </div>
         <div class="h-64 flex items-center justify-center"><canvas id="productChartCanvas"></canvas></div>
       </div>
-    </section>
-
-    <!-- STATUS MODUL SISTEM -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-base font-bold text-white">Status Fitur & Modul Vanguard</h2>
-          <p class="text-xs text-slate-400">Hak akses modul dikendalikan terpusat melalui Google Sheets</p>
-        </div>
-        <span class="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full font-semibold">Active Features</span>
-      </div>
-      <div id="moduleGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3"></div>
     </section>
 
     <!-- TABEL TRANSAKSI KASIR -->
@@ -241,8 +250,8 @@
         renderHeader(data.company);
         renderBranchTabs(data.branches || [], data.branchPerformance || [], branch);
         renderKpis(data.kpi, branch);
+        renderInventory(data.inventory || []);
         renderCharts(data.charts);
-        renderModules(data.modules || []);
         renderTransactions(data.transactions || []);
 
       } catch (err) {
@@ -337,6 +346,33 @@
       document.getElementById('tableSubTitle').innerText = branch ? `Riwayat order khusus ${branch}` : 'Data live dari seluruh kasir cabang';
     }
 
+    // RENDER INVENTORI STOK REAL-TIME DI DASHBOARD
+    function renderInventory(inv) {
+      const tbody = document.getElementById('inventoryTableBody');
+      if (!inv || inv.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada data inventori terdaftar.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = inv.map(p => {
+        const isLow = p.current_stock <= 10;
+        return `
+          <tr class="hover:bg-slate-800/40">
+            <td class="py-3 px-4 font-mono font-bold text-slate-400">${p.product_code}</td>
+            <td class="py-3 px-4 font-bold text-white">${p.product_name}</td>
+            <td class="py-3 px-4 text-slate-300">${p.category || '-'}</td>
+            <td class="py-3 px-4 text-center font-bold text-blue-400">${p.stock_in} pcs</td>
+            <td class="py-3 px-4 text-center font-bold text-rose-400">${p.stock_sold} pcs</td>
+            <td class="py-3 px-4 text-center">
+              <span class="px-2.5 py-0.5 rounded-full font-black text-xs ${isLow ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}">
+                ${p.current_stock} pcs
+              </span>
+            </td>
+            <td class="py-3 px-4 text-right font-black text-emerald-400">${formatIdr(p.price)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
     function renderCharts(c) {
       if (dailyChart) dailyChart.destroy();
       if (productChart) productChart.destroy();
@@ -370,28 +406,6 @@
         },
         options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, color: '#94a3b8' } } } }
       });
-    }
-
-    function renderModules(modules) {
-      const icons = {
-        'MOD_SALES': '📊', 'MOD_INVENTORY': '📦', 'MOD_FINANCE': '💳',
-        'MOD_CUSTOMER': '👥', 'MOD_PRODUCTION': '🏭', 'MOD_REPORT': '📑'
-      };
-      const container = document.getElementById('moduleGrid');
-      container.innerHTML = modules.map(m => {
-        const on = m.is_enabled;
-        return `
-          <div class="p-3 rounded-xl border ${on ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-slate-800 bg-slate-900/30 opacity-60'} flex flex-col justify-between">
-            <div class="flex items-center justify-between">
-              <span class="text-lg">${icons[m.module_code] || '⚙️'}</span>
-              <span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${on ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-500'}">
-                ${on ? '✅ ON' : '🔒 OFF'}
-              </span>
-            </div>
-            <p class="text-xs font-semibold text-white mt-2 truncate">${m.module_name}</p>
-          </div>
-        `;
-      }).join('');
     }
 
     function renderTransactions(trxs) {
