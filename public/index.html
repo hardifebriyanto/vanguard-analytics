@@ -4,9 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Vanguard Analytics — Cloud Hybrid Multi-Tenant</title>
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     @media print {
@@ -39,7 +37,7 @@
         </div>
       </div>
 
-      <!-- Action Buttons -->
+      <!-- Action Buttons & Dropdown Tenant -->
       <div class="flex items-center space-x-3 no-print">
         <button onclick="window.print()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition shadow-sm">
           <span>🖨️ Cetak PDF</span>
@@ -47,9 +45,15 @@
         <button onclick="exportToCsv()" class="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition">
           <span>📊 Export Excel</span>
         </button>
-        <select id="tenantSelect" onchange="switchTenant(this.value)" class="bg-slate-800 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 text-slate-200 focus:ring-1 focus:ring-cyan-500 font-medium">
-          <option value="COMP-001">COMP-001 - PT Maju Jaya</option>
-        </select>
+        
+        <!-- Dropdown Pilih Klien (Multi-Tenant Switcher) -->
+        <div class="flex items-center space-x-1.5 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1">
+          <span class="text-xs text-slate-400">🏢 Klien:</span>
+          <select id="tenantSelect" onchange="switchTenant(this.value)" class="bg-transparent text-xs text-cyan-400 font-bold focus:outline-none cursor-pointer">
+            <option value="COMP-001" class="bg-slate-900 text-slate-200">COMP-001 • PT Maju Jaya (Enterprise)</option>
+            <option value="COMP-002" class="bg-slate-900 text-slate-200">COMP-002 • CV Berkah Abadi (Basic)</option>
+          </select>
+        </div>
       </div>
     </div>
   </header>
@@ -60,9 +64,9 @@
     <div class="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 shadow-sm">
       <div class="flex items-center justify-between mb-2">
         <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center space-x-2">
-          <span>⚡ Kontrol Modul Klien (Live dari Google Sheets)</span>
+          <span>⚡ Kontrol Modul Klien (Live dari Cloud Neon DB)</span>
         </h3>
-        <span class="text-[11px] text-cyan-400 font-mono">Ganti ON/OFF di Sheets lalu Sync</span>
+        <span class="text-[11px] text-cyan-400 font-mono">Status Hak Akses Fitur Klien</span>
       </div>
       <div id="modulePills" class="flex flex-wrap gap-2">
         <span class="text-xs text-slate-500">Memuat status modul...</span>
@@ -95,7 +99,7 @@
             <span class="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 text-sm">🧾</span>
           </div>
           <div id="kpiTrx" class="text-2xl font-black text-white tracking-tight">0</div>
-          <span class="text-[11px] text-slate-400 font-medium">Transaksi tervalidasi</span>
+          <span class="text-[11px] text-slate-400 font-medium">Transaksi tersimpan</span>
         </div>
 
         <!-- KPI 3: Total Quantity Sold -->
@@ -175,7 +179,7 @@
       <div id="reportContainer"></div>
     </section>
 
-    <!-- VISUAL CHARTS (TREN & PRODUK TERLARIS) -->
+    <!-- VISUAL CHARTS -->
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
         <div class="flex items-center justify-between mb-4">
@@ -202,7 +206,7 @@
       <div class="flex items-center justify-between mb-4">
         <div>
           <h3 class="text-sm font-bold text-white tracking-wide">Data Transaksi Terbaru (Live Neon DB)</h3>
-          <p class="text-xs text-slate-400">Sinkronisasi otomatis dari sheet IMPORT_DATA</p>
+          <p class="text-xs text-slate-400">Tersaring khusus untuk perusahaan yang dipilih</p>
         </div>
         <span id="trxCountBadge" class="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-cyan-400 border border-slate-700 font-mono">0 Baris Data</span>
       </div>
@@ -231,19 +235,19 @@
   </main>
 
   <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
-    VANGUARD ANALYTICS CLOUD HYBRID &copy; 2026 • Powered by PostgreSQL Neon & Vercel Serverless
+    VANGUARD ANALYTICS CLOUD HYBRID &copy; 2026 • Multi-Tenant Architecture
   </footer>
 
   <script>
     let currentData = null;
     let dailyChartInstance = null;
     let productChartInstance = null;
+    let activeCompanyId = 'COMP-001';
 
     function formatRupiah(num) {
       return 'Rp ' + Number(num || 0).toLocaleString('id-ID');
     }
 
-    // Helper untuk mengecek apakah status ON/True
     function isValOn(val) {
       if (val === true || val === 1 || val === '1' || val === 't' || val === 'true') return true;
       if (typeof val === 'string' && val.trim().toUpperCase() === 'ON') return true;
@@ -251,6 +255,9 @@
     }
 
     async function loadDashboard(companyId = 'COMP-001') {
+      activeCompanyId = companyId;
+      document.getElementById('tenantSelect').value = companyId;
+
       try {
         const res = await fetch(`/api/dashboard/${companyId}`);
         const data = await res.json();
@@ -264,12 +271,10 @@
     }
 
     function renderDashboard(data) {
-      // 1. Company Header (Fix: nama perusahaan & ID)
       const comp = data.company || {};
       document.getElementById('companyName').innerText = comp.company_name || comp.name || 'PT Maju Jaya';
-      document.getElementById('tenantDisplay').innerText = comp.company_id || comp.id || 'COMP-001';
+      document.getElementById('tenantDisplay').innerText = comp.company_id || comp.id || activeCompanyId;
 
-      // 2. Modules Status
       const modules = data.modules || [];
       const pillsContainer = document.getElementById('modulePills');
       pillsContainer.innerHTML = '';
@@ -288,7 +293,6 @@
         pillsContainer.appendChild(pill);
       });
 
-      // Update Plan Tier Badge
       const tierBadge = document.getElementById('tierBadge');
       if (enabledCount >= 5) {
         tierBadge.innerText = 'ENTERPRISE SUITE';
@@ -301,33 +305,28 @@
         tierBadge.className = 'text-xs px-2.5 py-0.5 rounded-full font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
       }
 
-      // Check Individual Modules
       const isFinanceOn = modules.some(m => m.module_code === 'FINANCE' && isValOn(m.is_enabled));
       const isInventoryOn = modules.some(m => m.module_code === 'INVENTORY' && isValOn(m.is_enabled));
       const isCustomerOn = modules.some(m => m.module_code === 'CUSTOMER' && isValOn(m.is_enabled));
       const isProductionOn = modules.some(m => m.module_code === 'PRODUCTION' && isValOn(m.is_enabled));
       const isReportOn = modules.some(m => m.module_code === 'REPORT' && isValOn(m.is_enabled));
 
-      // 3. Render Sales KPIs
       const rev = data.kpi ? data.kpi.totalRevenue : 0;
       document.getElementById('kpiRevenue').innerText = formatRupiah(rev);
       document.getElementById('kpiTrx').innerText = (data.kpi ? data.kpi.totalTrx : 0).toLocaleString('id-ID');
       document.getElementById('kpiQty').innerText = (data.kpi ? data.kpi.totalQty : 0).toLocaleString('id-ID') + ' item';
       document.getElementById('kpiTopProduct').innerText = data.kpi && data.kpi.topProduct ? data.kpi.topProduct : 'Belum Ada Transaksi';
 
-      // 4. Render Sections
       renderFinanceSection(isFinanceOn, rev);
       renderInventorySection(isInventoryOn);
       renderCustomerSection(isCustomerOn, rev, data.kpi ? data.kpi.totalTrx : 0);
       renderProductionSection(isProductionOn);
       renderReportSection(isReportOn);
 
-      // 5. Render Charts & Tables
       renderCharts(data.charts);
       renderTable(data.transactions);
     }
 
-    // Helper Card Terkunci
     function lockedCardHtml(title, desc, code) {
       return `
         <div class="border border-dashed border-slate-800 rounded-2xl p-6 text-center bg-slate-900/40 backdrop-blur-sm">
@@ -337,21 +336,18 @@
           <h4 class="text-sm font-bold text-slate-300 tracking-wider uppercase">${title} TERKUNCI</h4>
           <p class="text-xs text-slate-500 mt-1.5 max-w-lg mx-auto">${desc}</p>
           <div class="mt-3 inline-block text-[11px] font-mono text-cyan-400 bg-cyan-950/40 border border-cyan-800/50 px-3 py-1 rounded-full">
-            💡 Buka Google Sheets > Tab MODULES > Ubah ${code} = ON > Klik VANGUARD > SYNC
+            💡 Paket Klien Ini Belum Mengaktifkan Modul ${code}
           </div>
         </div>
       `;
     }
 
-    // 4. Modul Keuangan
     function renderFinanceSection(isOn, rev) {
       const badge = document.getElementById('financeBadge');
       const container = document.getElementById('financeContainer');
       if (isOn) {
         badge.innerText = 'AKTIF';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
-        const netProfit = rev * 0.40;
-        const cogsExpense = rev * 0.60;
         container.innerHTML = `
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="bg-gradient-to-br from-slate-900 to-emerald-950/30 border border-emerald-800/40 rounded-2xl p-5 shadow-sm">
@@ -359,7 +355,7 @@
                 <span class="text-xs font-semibold uppercase tracking-wider">Estimasi Laba Bersih</span>
                 <span class="text-sm">📈</span>
               </div>
-              <div class="text-2xl font-black text-white">${formatRupiah(netProfit)}</div>
+              <div class="text-2xl font-black text-white">${formatRupiah(rev * 0.40)}</div>
               <span class="text-[11px] text-emerald-400">Margin Keuntungan: 40.0%</span>
             </div>
             <div class="bg-gradient-to-br from-slate-900 to-rose-950/30 border border-rose-800/40 rounded-2xl p-5 shadow-sm">
@@ -367,7 +363,7 @@
                 <span class="text-xs font-semibold uppercase tracking-wider">Estimasi Beban & HPP</span>
                 <span class="text-sm">📉</span>
               </div>
-              <div class="text-2xl font-black text-white">${formatRupiah(cogsExpense)}</div>
+              <div class="text-2xl font-black text-white">${formatRupiah(rev * 0.60)}</div>
               <span class="text-[11px] text-rose-400">Beban Pokok Penjualan (HPP)</span>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-sm">
@@ -383,11 +379,10 @@
       } else {
         badge.innerText = 'TERKUNCI (OFF)';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
-        container.innerHTML = lockedCardHtml('Modul Keuangan & Laba Rugi', 'Analitik Laba Bersih, HPP, Arus Kas dan Rasio Profitabilitas saat ini terkunci.', 'FINANCE');
+        container.innerHTML = lockedCardHtml('Modul Keuangan & Laba Rugi', 'Analitik Laba Bersih, HPP, Arus Kas dan Rasio Profitabilitas saat ini terkunci untuk paket ini.', 'FINANCE');
       }
     }
 
-    // 5. Modul Inventori
     function renderInventorySection(isOn) {
       const badge = document.getElementById('inventoryBadge');
       const container = document.getElementById('inventoryContainer');
@@ -421,18 +416,16 @@
       } else {
         badge.innerText = 'TERKUNCI (OFF)';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
-        container.innerHTML = lockedCardHtml('Modul Inventori & Gudang', 'Fitur pelacakan stok otomatis, valuasi aset gudang, dan alert barang habis terkunci.', 'INVENTORY');
+        container.innerHTML = lockedCardHtml('Modul Inventori & Gudang', 'Fitur pelacakan stok otomatis, valuasi aset gudang, dan alert barang habis terkunci untuk paket ini.', 'INVENTORY');
       }
     }
 
-    // 6. Modul Pelanggan
     function renderCustomerSection(isOn, rev, trxCount) {
       const badge = document.getElementById('customerBadge');
       const container = document.getElementById('customerContainer');
       if (isOn) {
         badge.innerText = 'AKTIF';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-blue-500/20 text-blue-300 border-blue-500/30';
-        const aov = trxCount > 0 ? rev / trxCount : 0;
         container.innerHTML = `
           <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -447,7 +440,7 @@
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
               <div class="text-xs text-slate-400 font-medium uppercase mb-1">Rata-rata Belanja (AOV)</div>
-              <div class="text-xl font-bold text-white">${formatRupiah(aov)}</div>
+              <div class="text-xl font-bold text-white">${formatRupiah(trxCount > 0 ? rev / trxCount : 0)}</div>
               <div class="text-[11px] text-slate-400 mt-1">Per transaksi pembelian</div>
             </div>
             <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
@@ -460,11 +453,10 @@
       } else {
         badge.innerText = 'TERKUNCI (OFF)';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
-        container.innerHTML = lockedCardHtml('Modul Pelanggan & CRM', 'Analisis segmentasi pelanggan, retensi repeat order, dan ranking VIP klien terkunci.', 'CUSTOMER');
+        container.innerHTML = lockedCardHtml('Modul Pelanggan & CRM', 'Analisis segmentasi pelanggan, retensi repeat order, dan ranking VIP klien terkunci untuk paket ini.', 'CUSTOMER');
       }
     }
 
-    // 7. Modul Produksi
     function renderProductionSection(isOn) {
       const badge = document.getElementById('productionBadge');
       const container = document.getElementById('productionContainer');
@@ -498,11 +490,10 @@
       } else {
         badge.innerText = 'TERKUNCI (OFF)';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
-        container.innerHTML = lockedCardHtml('Modul Operasional & Produksi', 'Pelacakan output pabrik, efisiensi kerja mesin, dan tingkat reject produksi terkunci.', 'PRODUCTION');
+        container.innerHTML = lockedCardHtml('Modul Operasional & Produksi', 'Pelacakan output pabrik, efisiensi kerja mesin, dan tingkat reject produksi terkunci untuk paket ini.', 'PRODUCTION');
       }
     }
 
-    // 8. Modul Laporan
     function renderReportSection(isOn) {
       const badge = document.getElementById('reportBadge');
       const container = document.getElementById('reportContainer');
@@ -528,11 +519,10 @@
       } else {
         badge.innerText = 'TERKUNCI (OFF)';
         badge.className = 'text-[10px] px-2 py-0.5 rounded-full border bg-slate-800 text-slate-400 border-slate-700';
-        container.innerHTML = lockedCardHtml('Modul Manajemen Laporan & Audit', 'Fitur cetak otomatis laporan audit investor dan pembukuan pajak terkunci.', 'REPORT');
+        container.innerHTML = lockedCardHtml('Modul Manajemen Laporan & Audit', 'Fitur cetak otomatis laporan audit investor dan pembukuan pajak terkunci untuk paket ini.', 'REPORT');
       }
     }
 
-    // Render Charts
     function renderCharts(charts) {
       if (!charts) return;
 
@@ -587,12 +577,11 @@
       });
     }
 
-    // Render Table
     function renderTable(transactions) {
       const tbody = document.getElementById('trxTableBody');
       const badge = document.getElementById('trxCountBadge');
       if (!transactions || transactions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada transaksi. Silakan input di Google Sheets lalu Sync.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada transaksi tersimpan untuk perusahaan ini.</td></tr>';
         badge.innerText = '0 Baris Data';
         return;
       }
@@ -610,7 +599,6 @@
       `).join('');
     }
 
-    // Export CSV
     function exportToCsv() {
       if (!currentData || !currentData.transactions || currentData.transactions.length === 0) {
         alert('Tidak ada data transaksi untuk diekspor!');
@@ -630,7 +618,7 @@
       const encodedUri = encodeURI(csvContent);
       const link = document.createElement('a');
       link.setAttribute('href', encodedUri);
-      link.setAttribute('download', `Vanguard_Export_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute('download', `Vanguard_${activeCompanyId}_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -640,8 +628,10 @@
       loadDashboard(tenantId);
     }
 
-    // Start loading
-    loadDashboard('COMP-001');
+    // Auto-detect URL parameter (misal: ?tenant=COMP-002)
+    const urlParams = new URLSearchParams(window.location.search);
+    const initialTenant = urlParams.get('tenant') || 'COMP-001';
+    loadDashboard(initialTenant);
   </script>
 </body>
 </html>
