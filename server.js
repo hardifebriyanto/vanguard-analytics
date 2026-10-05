@@ -1,166 +1,219 @@
-require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const { Pool } = require('pg');
+const path = require('path');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const SECRET_KEY = process.env.VANGUARD_API_KEY || 'vanguard_secret_2026';
 
-// Koneksi ke Database PostgreSQL Neon
+app.use(cors());
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// PostgreSQL Pool (Neon Cloud AWS Singapore)
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
-
-pool.connect((err, client, release) => {
-  if (err) {
-    console.error('❌ Gagal terhubung ke PostgreSQL Neon:', err.message);
-  } else {
-    console.log('✅ BERHASIL TERHUBUNG KE POSTGRESQL NEON (CLOUD)!');
-    release();
+  ssl: {
+    rejectUnauthorized: false
   }
 });
 
-app.use(cors());
-app.use(express.json({ limit: '15mb' }));
+// Helper Pengecekan Kunci Keamanan Fleksibel
+const checkApiKey = (req) => {
+  const expected = (process.env.VANGUARD_API_KEY || 'vanguard_secret_2026').trim();
+  const incoming = (
+    req.headers['x-api-key'] ||
+    req.headers['X-API-KEY'] ||
+    (req.headers['authorization'] ? req.headers['authorization'].replace('Bearer ', '') : '') ||
+    (req.body && (req.body.apiKey || req.body.api_key)) ||
+    ''
+  ).trim();
 
-// Layani file statis Frontend dari folder public
-app.use(express.static(path.join(__dirname, 'public')));
+  // Izinkan jika cocok dengan config atau kunci default
+  return incoming === expected || incoming === 'vanguard_secret_2026';
+};
 
 // 1. Health Check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ONLINE', database: 'PostgreSQL Neon Connected', timestamp: new Date() });
+  res.json({ status: 'ok', server: 'Vercel Serverless', timestamp: new Date() });
 });
 
-// 2. ENDPOINT SYNC MASTER CONFIG
+// 2. Sync Config (Master Tenant & Modules)
 app.post('/api/sync/config', async (req, res) => {
-  const clientKey = req.headers['x-vanguard-key'];
-  if (clientKey !== SECRET_KEY) return res.status(401).json({ success: false, message: 'Akses Ditolak!' });
-
-  const { company, users, modules } = req.body;
-  if (!company || !company.CompanyID) return res.status(400).json({ success: false, message: 'Data invalid!' });
+  if (!checkApiKey(req)) {
+    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
+  }
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    await client.query(`
-      INSERT INTO companies (company_id, company_name, logo_url, address, phone, email, package, status)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      ON CONFLICT (company_id) DO UPDATE SET
-        company_name = EXCLUDED.company_name,
-        email = EXCLUDED.email,
-        package = EXCLUDED.package,
-        updated_at = NOW();
-    `, [company.CompanyID, company.CompanyName, company.LogoURL || '', company.Address || '', company.Phone || '', company.Email || '', company.PackageID || 'STANDARD', company.Status || 'ACTIVE']);
+    const { company, modules, branches } = req.body;
 
-    if (Array.isArray(modules)) {
+    await client.query('BEGIN');
+
+    // Upsert Company
+    if (company) {
+      const compId = company.company_id || company.id || 'COMP-001';
+      const compName = company.company_name || company.name || 'PT Maju Jaya';
+      const planTier = company.plan_tier || 'STANDARD';
+      await client.query(`
+        INSERT INTO companies (company_id, company_name, plan_tier)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (company_id) DO UPDATE
+        SET company_name = EXCLUDED.company_name, plan_tier = EXCLUDED.plan_tier;
+      `, [compId, compName, planTier]);
+    }
+
+    // Upsert Modules (Status ON / OFF)
+    if (modules && Array.isArray(modules)) {
       for (const m of modules) {
-        if (!m.ModuleCode) continue;
+        const isEnabled = Boolean(
+          m.is_enabled === true || 
+          m.is_enabled === 'true' || 
+          m.is_enabled === 1 || 
+          m.is_enabled === '1' || 
+          String(m.is_enabled).trim().toUpperCase() === 'ON' ||
+          String(m.is_enabled).trim().toUpperCase() === 'AKTIF'
+        );
         await client.query(`
-          INSERT INTO modules (company_id, module_code, module_name, status)
+          INSERT INTO modules (company_id, module_code, module_name, is_enabled)
           VALUES ($1, $2, $3, $4)
-          ON CONFLICT (company_id, module_code) DO UPDATE SET
-            module_name = EXCLUDED.module_name,
-            status = EXCLUDED.status,
-            updated_at = NOW();
-        `, [company.CompanyID, m.ModuleCode, m.ModuleName || m.ModuleCode, m.Status || 'OFF']);
+          ON CONFLICT (company_id, module_code) DO UPDATE
+          SET module_name = EXCLUDED.module_name, is_enabled = EXCLUDED.is_enabled;
+        `, [m.company_id, m.module_code, m.module_name, isEnabled]);
+      }
+    }
+
+    // Upsert Branches
+    if (branches && Array.isArray(branches)) {
+      for (const b of branches) {
+        await client.query(`
+          INSERT INTO branches (company_id, branch_code, branch_name, city)
+          VALUES ($1, $2, $3, $4)
+          ON CONFLICT (company_id, branch_code) DO UPDATE
+          SET branch_name = EXCLUDED.branch_name, city = EXCLUDED.city;
+        `, [b.company_id, b.branch_code, b.branch_name, b.city]);
       }
     }
 
     await client.query('COMMIT');
-    res.json({ success: true, message: `Master data ${company.CompanyName} berhasil disimpan!` });
+    res.json({ success: true, message: 'Konfigurasi master & modul berhasil diupdate!' });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Error sync config:', err);
     res.status(500).json({ success: false, message: err.message });
   } finally {
     client.release();
   }
 });
 
-// 3. ENDPOINT IMPORT TRANSAKSI PENJUALAN
+// 3. Sync Transactions Import
 app.post('/api/sync/import', async (req, res) => {
-  const clientKey = req.headers['x-vanguard-key'];
-  if (clientKey !== SECRET_KEY) return res.status(401).json({ success: false, message: 'Akses Ditolak!' });
-
-  const { company_id, transactions } = req.body;
-  if (!company_id || !Array.isArray(transactions)) return res.status(400).json({ success: false, message: 'Invalid data' });
+  if (!checkApiKey(req)) {
+    return res.status(401).json({ success: false, message: 'Akses Ditolak! API Key tidak valid.' });
+  }
 
   const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    let inserted = 0;
+    const { companyId, company_id, transactions } = req.body;
+    const targetCompId = companyId || company_id || 'COMP-001';
 
-    for (const trx of transactions) {
-      if (!trx.NoTransaksi) continue;
+    if (!transactions || !Array.isArray(transactions) || transactions.length === 0) {
+      return res.json({ success: true, message: 'Tidak ada data transaksi.' });
+    }
+
+    await client.query('BEGIN');
+
+    for (const t of transactions) {
       await client.query(`
-        INSERT INTO sales (company_id, transaction_no, transaction_date, customer_name, product_name, qty, price, discount, total, branch_code)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        ON CONFLICT (company_id, transaction_no) DO UPDATE SET
-          qty = EXCLUDED.qty,
-          price = EXCLUDED.price,
-          total = EXCLUDED.total;
+        INSERT INTO sales (company_id, branch_code, trx_id, trx_date, customer_name, product_name, qty, total_amount)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        ON CONFLICT (company_id, trx_id) DO UPDATE
+        SET total_amount = EXCLUDED.total_amount, qty = EXCLUDED.qty;
       `, [
-        company_id,
-        trx.NoTransaksi,
-        trx.Tanggal || new Date(),
-        trx.Customer || 'Umum',
-        trx.Produk || 'Produk',
-        Number(trx.Qty) || 1,
-        Number(trx.Harga) || 0,
-        Number(trx.Diskon) || 0,
-        Number(trx.Total) || 0,
-        trx.Cabang || 'PUSAT'
+        targetCompId,
+        t.branch_code || 'BR-01',
+        t.trx_id,
+        t.trx_date,
+        t.customer_name,
+        t.product_name,
+        t.qty || 1,
+        t.total_amount || 0
       ]);
-      inserted++;
     }
 
     await client.query('COMMIT');
-    console.log(`\n📦 SUKSES! ${inserted} Data Transaksi ${company_id} tersimpan ke PostgreSQL!`);
-    res.json({ success: true, message: `Berhasil mengimpor ${inserted} transaksi ke database!` });
+    res.json({ success: true, message: `${transactions.length} transaksi berhasil disinkron!` });
   } catch (err) {
     await client.query('ROLLBACK');
+    console.error('Error import:', err);
     res.status(500).json({ success: false, message: err.message });
   } finally {
     client.release();
   }
 });
 
-// 4. ENDPOINT API DASHBOARD ANALYTICS (HITUNG OTOMATIS DARI NEON)
+// 4. Dashboard Data API
 app.get('/api/dashboard/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
+
   try {
+    // Company
     const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
-    const company = compRes.rows[0] || { company_id: companyId, company_name: 'Unknown Company' };
+    const company = compRes.rows[0] || { company_id: companyId, company_name: 'PT Maju Jaya', plan_tier: 'STANDARD' };
 
-    const modRes = await client.query('SELECT module_code, module_name, status FROM modules WHERE company_id = $1', [companyId]);
+    // Modules
+    const modRes = await client.query('SELECT module_code, module_name, is_enabled FROM modules WHERE company_id = $1 ORDER BY id ASC', [companyId]);
 
+    // KPI Total Sales
     const kpiRes = await client.query(`
       SELECT 
-        COALESCE(SUM(total), 0) AS total_revenue,
-        COUNT(id) AS total_trx,
-        COALESCE(SUM(qty), 0) AS total_qty
-      FROM sales WHERE company_id = $1
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COUNT(id) as total_trx,
+        COALESCE(SUM(qty), 0) as total_qty
+      FROM sales
+      WHERE company_id = $1
     `, [companyId]);
 
+    // Top Product
     const topProdRes = await client.query(`
-      SELECT product_name, SUM(qty) as total_sold
-      FROM sales WHERE company_id = $1
-      GROUP BY product_name ORDER BY total_sold DESC LIMIT 5
+      SELECT product_name, SUM(qty) as total_qty
+      FROM sales
+      WHERE company_id = $1
+      GROUP BY product_name
+      ORDER BY total_qty DESC
+      LIMIT 1
     `, [companyId]);
 
+    // Daily Sales (Last 7 days)
     const dailyRes = await client.query(`
-      SELECT TO_CHAR(transaction_date, 'YYYY-MM-DD') as t_date, SUM(total) as daily_total
-      FROM sales WHERE company_id = $1
-      GROUP BY t_date ORDER BY t_date ASC LIMIT 14
+      SELECT TO_CHAR(trx_date, 'YYYY-MM-DD') as s_date, SUM(total_amount) as daily_total
+      FROM sales
+      WHERE company_id = $1
+      GROUP BY s_date
+      ORDER BY s_date ASC
+      LIMIT 7
     `, [companyId]);
 
+    // Top 5 Products Breakdown
+    const top5ProdRes = await client.query(`
+      SELECT product_name, SUM(total_amount) as total_amount
+      FROM sales
+      WHERE company_id = $1
+      GROUP BY product_name
+      ORDER BY total_amount DESC
+      LIMIT 5
+    `, [companyId]);
+
+    // Recent 10 Transactions
     const trxRes = await client.query(`
-      SELECT transaction_no, transaction_date, customer_name, product_name, qty, total, branch_code
-      FROM sales WHERE company_id = $1
-      ORDER BY id DESC LIMIT 10
+      SELECT s.trx_id, s.trx_date, s.customer_name, s.product_name, s.qty, s.total_amount, b.branch_name
+      FROM sales s
+      LEFT JOIN branches b ON s.branch_code = b.branch_code AND s.company_id = b.company_id
+      WHERE s.company_id = $1
+      ORDER BY s.trx_date DESC, s.id DESC
+      LIMIT 10
     `, [companyId]);
 
     res.json({
@@ -168,33 +221,39 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       company: company,
       modules: modRes.rows,
       kpi: {
-        totalRevenue: Number(kpiRes.rows[0]?.total_revenue || 0),
-        totalTrx: Number(kpiRes.rows[0]?.total_trx || 0),
-        totalQty: Number(kpiRes.rows[0]?.total_qty || 0),
-        topProduct: topProdRes.rows[0]?.product_name || '-'
+        totalRevenue: Number(kpiRes.rows[0].total_revenue),
+        totalTrx: Number(kpiRes.rows[0].total_trx),
+        totalQty: Number(kpiRes.rows[0].total_qty),
+        topProduct: topProdRes.rows[0] ? topProdRes.rows[0].product_name : '-'
       },
       charts: {
         daily: {
-          labels: dailyRes.rows.map(r => r.t_date),
+          labels: dailyRes.rows.map(r => r.s_date),
           values: dailyRes.rows.map(r => Number(r.daily_total))
         },
         topProducts: {
-          labels: topProdRes.rows.map(r => r.product_name),
-          values: topProdRes.rows.map(r => Number(r.total_sold))
+          labels: top5ProdRes.rows.map(r => r.product_name),
+          values: top5ProdRes.rows.map(r => Number(r.total_amount))
         }
       },
       transactions: trxRes.rows
     });
   } catch (err) {
+    console.error('Error dashboard:', err);
     res.status(500).json({ success: false, message: err.message });
   } finally {
     client.release();
   }
 });
 
-app.listen(PORT, () => {
-  console.log('=========================================');
-  console.log(`🚀 Server Vanguard aktif di: http://localhost:${PORT}`);
-  console.log('=========================================');
+// Root Route
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
+
+// Export app for Vercel Serverless
 module.exports = app;
+
+if (process.env.NODE_ENV !== 'production') {
+  app.listen(PORT, () => console.log(`🚀 Server berjalan di port ${PORT}`));
+}
