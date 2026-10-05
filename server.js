@@ -20,7 +20,7 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
   const cleanId = String(companyId || 'COMP-001').trim();
   const displayName = companyName || cleanId;
 
-  // 1. Cek Kolom yang ada di tabel companies
+  // 1. Cek Kolom di tabel companies
   const colRes = await client.query(
     `SELECT column_name FROM information_schema.columns WHERE table_name = 'companies'`
   );
@@ -60,13 +60,13 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
     );
   }
 
-  // 3. Cek Kolom yang ada di tabel branches
+  // 3. Cek Kolom di tabel branches
   const bColRes = await client.query(
     `SELECT column_name FROM information_schema.columns WHERE table_name = 'branches'`
   );
   const bCols = bColRes.rows.map(r => r.column_name.toLowerCase());
 
-  // 4. Cek apakah Cabang sudah ada
+  // 4. Cek Cabang Default
   const branchCheck = await client.query('SELECT branch_id FROM branches WHERE company_id = $1', [cleanId]);
   if (branchCheck.rows.length === 0) {
     const bColsList = ['branch_id', 'company_id'];
@@ -91,7 +91,7 @@ async function ensureCompanyAndBranch(client, companyId, companyName = null) {
   }
 }
 
-// 1. INIT POS
+// 1. INIT POS (Load Toko, Cabang, dan Produk)
 app.get('/api/pos/init/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
@@ -101,7 +101,7 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
     const compRes = await client.query('SELECT * FROM companies WHERE company_id = $1', [companyId]);
     const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1 ORDER BY branch_id ASC', [companyId]);
     const prodRes = await client.query(
-      'SELECT product_id, name, category, unit_price, stock_in, stock_sold, current_stock FROM products WHERE company_id = $1 AND is_active = true ORDER BY name ASC',
+      'SELECT * FROM products WHERE company_id = $1 AND (is_active = true OR is_active IS NULL)',
       [companyId]
     );
 
@@ -111,6 +111,16 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
       name: b.branch_name || b.name || b.branch_id
     }));
 
+    const products = prodRes.rows.map(p => ({
+      product_id: p.product_id || p.id || p.sku,
+      name: p.name || p.product_name,
+      category: p.category || 'Umum',
+      unit_price: Number(p.unit_price !== undefined ? p.unit_price : (p.price || 0)),
+      stock_in: Number(p.stock_in || 0),
+      stock_sold: Number(p.stock_sold || 0),
+      current_stock: Number(p.current_stock !== undefined ? p.current_stock : (p.stock !== undefined ? p.stock : (Number(p.stock_in || 0) - Number(p.stock_sold || 0))))
+    }));
+
     res.json({
       success: true,
       company: {
@@ -118,7 +128,7 @@ app.get('/api/pos/init/:companyId', async (req, res) => {
         name: comp.company_name || comp.name || companyId
       },
       branches: branches,
-      products: prodRes.rows || []
+      products: products
     });
   } catch (err) {
     console.error('POS Init Error:', err);
@@ -139,36 +149,82 @@ app.post('/api/pos/sync-products', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Auto-create company & branch jika belum ada di database
+    // Pastikan Tenant & Cabang Ada
     await ensureCompanyAndBranch(client, company_id, company_name);
 
+    // Auto-tambah kolom stok jika belum ada di tabel products
+    await client.query(`
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_in NUMERIC DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS stock_sold NUMERIC DEFAULT 0;
+      ALTER TABLE products ADD COLUMN IF NOT EXISTS current_stock NUMERIC DEFAULT 0;
+    `).catch(() => {});
+
+    // Deteksi nama kolom yang sebenarnya di tabel products
+    const pColRes = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
+    );
+    const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
+    const idCol = pCols.includes('product_id') ? 'product_id' : 'id';
+    const nameCol = pCols.includes('name') ? 'name' : (pCols.includes('product_name') ? 'product_name' : 'name');
+
     for (const p of products) {
-      const pId = String(p.product_id).trim();
+      const pId = String(p.product_id || p.id).trim();
       const pName = String(p.name).trim();
       const pCat = String(p.category || 'Umum').trim();
-      const pPrice = Number(p.unit_price || 0);
+      const pPrice = Number(p.unit_price || p.price || 0);
       const sIn = Number(p.stock_in || 0);
       const sSold = Number(p.stock_sold || 0);
       let cStock = Number(p.current_stock);
       if (isNaN(cStock)) cStock = sIn - sSold;
 
+      // Cek apakah produk sudah ada di database
       const check = await client.query(
-        'SELECT product_id FROM products WHERE company_id = $1 AND product_id = $2',
+        `SELECT ${idCol} FROM products WHERE company_id = $1 AND ${idCol} = $2`,
         [company_id, pId]
       );
 
       if (check.rows.length > 0) {
+        // UPDATE
+        const setClauses = [];
+        const updateVals = [];
+        let uIdx = 1;
+
+        if (pCols.includes(nameCol)) { setClauses.push(`${nameCol} = $${uIdx++}`); updateVals.push(pName); }
+        if (pCols.includes('category')) { setClauses.push(`category = $${uIdx++}`); updateVals.push(pCat); }
+        if (pCols.includes('unit_price')) { setClauses.push(`unit_price = $${uIdx++}`); updateVals.push(pPrice); }
+        if (pCols.includes('price')) { setClauses.push(`price = $${uIdx++}`); updateVals.push(pPrice); }
+        if (pCols.includes('stock_in')) { setClauses.push(`stock_in = $${uIdx++}`); updateVals.push(sIn); }
+        if (pCols.includes('stock_sold')) { setClauses.push(`stock_sold = $${uIdx++}`); updateVals.push(sSold); }
+        if (pCols.includes('current_stock')) { setClauses.push(`current_stock = $${uIdx++}`); updateVals.push(cStock); }
+        if (pCols.includes('stock')) { setClauses.push(`stock = $${uIdx++}`); updateVals.push(cStock); }
+        if (pCols.includes('is_active')) { setClauses.push(`is_active = $${uIdx++}`); updateVals.push(true); }
+        if (pCols.includes('updated_at')) { setClauses.push(`updated_at = NOW()`); }
+
+        updateVals.push(company_id, pId);
         await client.query(
-          `UPDATE products 
-           SET name = $1, category = $2, unit_price = $3, stock_in = $4, stock_sold = $5, current_stock = $6, is_active = true, updated_at = NOW()
-           WHERE company_id = $7 AND product_id = $8`,
-          [pName, pCat, pPrice, sIn, sSold, cStock, company_id, pId]
+          `UPDATE products SET ${setClauses.join(', ')} WHERE company_id = $${uIdx++} AND ${idCol} = $${uIdx++}`,
+          updateVals
         );
       } else {
+        // INSERT
+        const insertCols = [idCol, 'company_id'];
+        const insertVals = [pId, company_id];
+        const placeholders = ['$1', '$2'];
+        let iIdx = 3;
+
+        if (pCols.includes(nameCol)) { insertCols.push(nameCol); insertVals.push(pName); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('category')) { insertCols.push('category'); insertVals.push(pCat); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('unit_price')) { insertCols.push('unit_price'); insertVals.push(pPrice); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('price')) { insertCols.push('price'); insertVals.push(pPrice); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('stock_in')) { insertCols.push('stock_in'); insertVals.push(sIn); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('stock_sold')) { insertCols.push('stock_sold'); insertVals.push(sSold); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('current_stock')) { insertCols.push('current_stock'); insertVals.push(cStock); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('stock')) { insertCols.push('stock'); insertVals.push(cStock); placeholders.push(`$${iIdx++}`); }
+        if (pCols.includes('is_active')) { insertCols.push('is_active'); insertVals.push(true); placeholders.push(`$${iIdx++}`); }
+
         await client.query(
-          `INSERT INTO products (product_id, company_id, name, category, unit_price, stock_in, stock_sold, current_stock, is_active)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)`,
-          [pId, company_id, pName, pCat, pPrice, sIn, sSold, cStock]
+          `INSERT INTO products (${insertCols.join(', ')}) VALUES (${placeholders.join(', ')})`,
+          insertVals
         );
       }
     }
@@ -202,18 +258,32 @@ app.post('/api/pos/checkout', async (req, res) => {
       [trxId, company_id, branch_id, cashier_name || 'Kasir', total_amount, payment_method || 'CASH', JSON.stringify(items)]
     );
 
+    const pColRes = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_name = 'products'`
+    );
+    const pCols = pColRes.rows.map(r => r.column_name.toLowerCase());
+    const idCol = pCols.includes('product_id') ? 'product_id' : 'id';
+
     for (const item of items) {
-      const pId = String(item.product_id).trim();
+      const pId = String(item.product_id || item.id).trim();
       const qty = Number(item.quantity || item.qty || 1);
 
-      await client.query(
-        `UPDATE products 
-         SET stock_sold = COALESCE(stock_sold, 0) + $1,
-             current_stock = GREATEST(0, COALESCE(current_stock, 0) - $1),
-             updated_at = NOW()
-         WHERE company_id = $2 AND product_id = $3`,
-        [qty, company_id, pId]
-      );
+      const updates = [];
+      const uVals = [qty];
+      let idx = 2;
+
+      if (pCols.includes('stock_sold')) updates.push(`stock_sold = COALESCE(stock_sold, 0) + $1`);
+      if (pCols.includes('current_stock')) updates.push(`current_stock = GREATEST(0, COALESCE(current_stock, 0) - $1)`);
+      if (pCols.includes('stock')) updates.push(`stock = GREATEST(0, COALESCE(stock, 0) - $1)`);
+      if (pCols.includes('updated_at')) updates.push(`updated_at = NOW()`);
+
+      if (updates.length > 0) {
+        uVals.push(company_id, pId);
+        await client.query(
+          `UPDATE products SET ${updates.join(', ')} WHERE company_id = $${idx++} AND ${idCol} = $${idx++}`,
+          uVals
+        );
+      }
     }
 
     await client.query('COMMIT');
@@ -232,7 +302,7 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
   const { companyId } = req.params;
   const client = await pool.connect();
   try {
-    const branchRes = await client.query('SELECT branch_id, branch_name FROM branches WHERE company_id = $1', [companyId]).catch(() => ({ rows: [] }));
+    const branchRes = await client.query('SELECT * FROM branches WHERE company_id = $1', [companyId]).catch(() => ({ rows: [] }));
     const branchMap = {};
     (branchRes.rows || []).forEach(b => {
       branchMap[b.branch_id] = b.branch_name || b.name || b.branch_id;
@@ -247,9 +317,7 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
     );
 
     const prodRes = await client.query(
-      `SELECT product_id, name, stock_in, stock_sold, current_stock 
-       FROM products 
-       WHERE company_id = $1`,
+      `SELECT * FROM products WHERE company_id = $1`,
       [companyId]
     );
 
@@ -258,10 +326,18 @@ app.get('/api/sync/pull/:companyId', async (req, res) => {
       branch_name: branchMap[t.branch_id] || 'Cabang Utama'
     }));
 
+    const products = prodRes.rows.map(p => ({
+      product_id: p.product_id || p.id || p.sku,
+      name: p.name || p.product_name,
+      stock_in: Number(p.stock_in || 0),
+      stock_sold: Number(p.stock_sold || 0),
+      current_stock: Number(p.current_stock !== undefined ? p.current_stock : (p.stock !== undefined ? p.stock : (Number(p.stock_in || 0) - Number(p.stock_sold || 0))))
+    }));
+
     res.json({
       success: true,
       transactions: transactions,
-      products: prodRes.rows || []
+      products: products
     });
   } catch (err) {
     console.error('Pull Sync Error:', err);
@@ -288,10 +364,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       [companyId]
     );
     const prodRes = await client.query(
-      `SELECT product_id, name as product_name, category, unit_price, stock_in, stock_sold, current_stock 
-       FROM products 
-       WHERE company_id = $1
-       ORDER BY name ASC`,
+      `SELECT * FROM products WHERE company_id = $1`,
       [companyId]
     );
 
@@ -309,6 +382,16 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       branch_name: branchMap[t.branch_id] || 'Cabang Utama'
     }));
 
+    const inventory = prodRes.rows.map(p => ({
+      product_id: p.product_id || p.id || p.sku,
+      product_name: p.name || p.product_name,
+      category: p.category || 'Umum',
+      unit_price: Number(p.unit_price !== undefined ? p.unit_price : (p.price || 0)),
+      stock_in: Number(p.stock_in || 0),
+      stock_sold: Number(p.stock_sold || 0),
+      current_stock: Number(p.current_stock !== undefined ? p.current_stock : (p.stock !== undefined ? p.stock : (Number(p.stock_in || 0) - Number(p.stock_sold || 0))))
+    }));
+
     res.json({
       success: true,
       company: {
@@ -317,7 +400,7 @@ app.get('/api/dashboard/:companyId', async (req, res) => {
       },
       branches: branches,
       transactions: transactions,
-      inventory: prodRes.rows || []
+      inventory: inventory
     });
   } catch (err) {
     console.error('Dashboard Error:', err);
