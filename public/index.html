@@ -39,13 +39,12 @@
         </div>
       </div>
 
-      <!-- FILTER CABANG & ALAT -->
+      <!-- ALAT CETAK & EXPORT -->
       <div class="flex items-center space-x-3 no-print">
-        <div class="flex items-center bg-slate-800/80 border border-slate-700 rounded-lg px-3 py-1.5 space-x-2">
-          <span class="text-xs text-slate-400 font-medium">📍 Cabang:</span>
-          <select id="branchSelect" onchange="onBranchChange(this.value)" class="bg-transparent text-sm font-semibold text-emerald-400 focus:outline-none cursor-pointer">
-            <option value="" class="bg-slate-900 text-white">Semua Cabang (Konsolidasi)</option>
-          </select>
+        <!-- Status Filter Aktif -->
+        <div class="hidden sm:flex items-center bg-slate-800/80 border border-slate-700 rounded-lg px-3 py-1.5 space-x-2">
+          <span class="text-xs text-slate-400">Laporan:</span>
+          <span id="activeFilterBadge" class="text-xs font-bold text-emerald-400">Semua Cabang (Konsolidasi)</span>
         </div>
 
         <button onclick="window.print()" class="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition-all shadow-sm">
@@ -63,7 +62,25 @@
   <!-- KONTEN DASHBOARD UTAMA -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
 
-    <!-- KPI CARDS -->
+    <!-- PANEL NAVIGASI CABANG INTERAKTIF (BISA DIKLIK) -->
+    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center space-x-2">
+            <span>🏢 Kinerja Cabang & Outlet (Klik untuk Filter Laporan)</span>
+          </h2>
+          <p class="text-xs text-slate-400">Klik salah satu cabang untuk melihat data detailnya, atau klik 'Semua Cabang' untuk total omzet konsolidasi.</p>
+        </div>
+        <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700" id="branchBadgeCount">5 Cabang Terdata</span>
+      </div>
+
+      <!-- GRID TOMBOL CABANG INTERAKTIF -->
+      <div id="branchListGrid" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <!-- Render otomatis via JS -->
+      </div>
+    </section>
+
+    <!-- KPI CARDS (4 METRICS) -->
     <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
       <div class="bg-slate-900/60 border border-slate-800 p-5 rounded-2xl shadow-sm print-card">
         <div class="flex justify-between items-start">
@@ -72,7 +89,7 @@
         </div>
         <div class="mt-4">
           <h3 id="kpiRevenue" class="text-2xl font-black text-white tracking-tight">Rp 0</h3>
-          <p class="text-xs text-emerald-400 mt-1 font-semibold">● Real-time Sync Cloud</p>
+          <p id="kpiFilterSub" class="text-xs text-emerald-400 mt-1 font-semibold">● Real-time Sync Cloud</p>
         </div>
       </div>
 
@@ -83,7 +100,7 @@
         </div>
         <div class="mt-4">
           <h3 id="kpiTrx" class="text-2xl font-black text-white tracking-tight">0</h3>
-          <p class="text-xs text-slate-400 mt-1">Struk Kasir Diterbitkan</p>
+          <p class="text-xs text-slate-400 mt-1">Order Kasir Google Form</p>
         </div>
       </div>
 
@@ -110,25 +127,13 @@
       </div>
     </section>
 
-    <!-- KINERJA MULTI-CABANG -->
-    <section class="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
-      <div class="flex items-center justify-between mb-4">
-        <div>
-          <h2 class="text-base font-bold text-white">🏢 Kinerja Cabang & Outlet</h2>
-          <p class="text-xs text-slate-400">Perbandingan kontribusi omzet antar unit bisnis</p>
-        </div>
-        <span class="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-md border border-slate-700" id="branchBadgeCount">Cabang Terdaftar</span>
-      </div>
-      <div id="branchListGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4"></div>
-    </section>
-
-    <!-- GRAFIK VISUALISASI -->
+    <!-- GRAFIK VISUALISASI ANALITIK -->
     <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div class="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-2xl p-6 shadow-sm print-card">
         <div class="flex justify-between items-center mb-6">
           <div>
             <h2 class="text-base font-bold text-white">Tren Omzet Penjualan</h2>
-            <p class="text-xs text-slate-400">Aktivitas 7 hari transaksi</p>
+            <p id="chartSubTitle" class="text-xs text-slate-400">Aktivitas 7 hari transaksi</p>
           </div>
           <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700">Daily</span>
         </div>
@@ -139,7 +144,7 @@
         <div class="flex justify-between items-center mb-6">
           <div>
             <h2 class="text-base font-bold text-white">Share Produk</h2>
-            <p class="text-xs text-slate-400">Top 5 kontributor</p>
+            <p class="text-xs text-slate-400">Distribusi kontribusi item</p>
           </div>
           <span class="text-xs bg-slate-800 text-slate-300 px-2.5 py-1 rounded-md border border-slate-700">Top 5</span>
         </div>
@@ -152,7 +157,7 @@
       <div class="flex items-center justify-between mb-4">
         <div>
           <h2 class="text-base font-bold text-white">Status Fitur & Modul Vanguard</h2>
-          <p class="text-xs text-slate-400">Kendali hak akses langsung dari Google Sheets</p>
+          <p class="text-xs text-slate-400">Hak akses modul dikendalikan terpusat melalui Google Sheets</p>
         </div>
         <span class="text-xs bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2.5 py-1 rounded-full font-semibold">Active Features</span>
       </div>
@@ -163,10 +168,10 @@
     <section class="bg-slate-900/60 border border-slate-800 rounded-2xl overflow-hidden shadow-sm print-card">
       <div class="p-6 border-b border-slate-800 flex justify-between items-center">
         <div>
-          <h2 class="text-base font-bold text-white">Riwayat Transaksi Terkini</h2>
-          <p class="text-xs text-slate-400">Data live dari kasir cabang</p>
+          <h2 class="text-base font-bold text-white">Riwayat Transaksi Kasir Terkini</h2>
+          <p id="tableSubTitle" class="text-xs text-slate-400">Data live tersinkron otomatis dari Google Form</p>
         </div>
-        <span class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md font-semibold">● 10 Trx Terakhir</span>
+        <span id="trxCountBadge" class="text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-md font-semibold">● Live Data</span>
       </div>
       <div class="overflow-x-auto">
         <table class="w-full text-left text-sm text-slate-300">
@@ -198,9 +203,8 @@
     let dailyChart = null;
     let productChart = null;
     let currentData = null;
-    let selectedBranch = '';
+    let activeBranch = '';
 
-    // Pengubah Link Google Drive ke Gambar Langsung
     function parseLogoUrl(url) {
       if (!url) return '';
       url = url.trim();
@@ -214,7 +218,7 @@
     const formatIdr = (n) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(n || 0);
 
     async function loadData(branch = '') {
-      selectedBranch = branch;
+      activeBranch = branch;
       const urlParams = new URLSearchParams(window.location.search);
       const tenantId = urlParams.get('tenant') || 'COMP-001';
 
@@ -228,9 +232,8 @@
 
         currentData = data;
         renderHeader(data.company);
-        renderBranchOptions(data.branches || [], branch);
-        renderBranchCards(data.branchPerformance || []);
-        renderKpis(data.kpi);
+        renderBranchTabs(data.branches || [], data.branchPerformance || [], branch);
+        renderKpis(data.kpi, branch);
         renderCharts(data.charts);
         renderModules(data.modules || []);
         renderTransactions(data.transactions || []);
@@ -265,40 +268,71 @@
       }
     }
 
-    function renderBranchOptions(branches, current) {
-      const select = document.getElementById('branchSelect');
-      select.innerHTML = '<option value="" class="bg-slate-900 text-white">Semua Cabang (Konsolidasi)</option>' +
-        branches.map(b => `<option value="${b.branch_code}" ${b.branch_code === current ? 'selected' : ''} class="bg-slate-900 text-white">${b.branch_name} (${b.branch_code})</option>`).join('');
-    }
-
-    function renderBranchCards(perfs) {
-      document.getElementById('branchBadgeCount').innerText = `${perfs.length} Cabang Terdata`;
+    // RENDER TOMBOL CABANG INTERAKTIF (BISA DIKLIK)
+    function renderBranchTabs(branches, perfs, current) {
       const container = document.getElementById('branchListGrid');
-      if (perfs.length === 0) {
-        container.innerHTML = '<p class="text-xs text-slate-500 col-span-3">Belum ada data transaksi cabang.</p>';
-        return;
-      }
-      container.innerHTML = perfs.map(p => `
-        <div class="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 flex justify-between items-center">
-          <div>
-            <div class="flex items-center space-x-2">
-              <span class="text-xs font-bold text-white">${p.branch_name}</span>
-              <span class="text-[10px] bg-slate-700 px-1.5 py-0.5 rounded text-slate-300">${p.branch_code}</span>
-            </div>
-            <p class="text-[11px] text-slate-400 mt-1">Kota: ${p.city} · ${p.total_trx} Struk</p>
+      const badge = document.getElementById('activeFilterBadge');
+      badge.innerText = current ? `Cabang: ${current}` : 'Semua Cabang (Konsolidasi)';
+
+      // Hitung total omzet semua cabang
+      let totalAllRevenue = 0;
+      perfs.forEach(p => totalAllRevenue += Number(p.total_revenue || 0));
+
+      // Buat pemetaan omzet per cabang
+      const perfMap = {};
+      perfs.forEach(p => {
+        perfMap[p.branch_code] = {
+          rev: Number(p.total_revenue || 0),
+          trx: p.total_trx || 0
+        };
+      });
+
+      // 1. Kartu Semua Cabang
+      const isAllActive = !current;
+      let html = `
+        <div onclick="loadData('')" class="cursor-pointer p-4 rounded-xl border transition-all ${isAllActive ? 'bg-blue-600/20 border-blue-500 ring-2 ring-blue-500/40 shadow-lg scale-[1.02]' : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-500 hover:bg-slate-800'}">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold ${isAllActive ? 'text-blue-300' : 'text-slate-200'}">🌐 SEMUA CABANG</span>
+            ${isAllActive ? '<span class="text-[9px] bg-blue-500 text-white font-bold px-1.5 py-0.5 rounded">AKTIF</span>' : ''}
           </div>
-          <div class="text-right">
-            <span class="text-xs font-black text-emerald-400">${formatIdr(p.total_revenue)}</span>
-          </div>
+          <p class="text-[10px] text-slate-400 mt-1">Konsolidasi Total</p>
+          <p class="text-xs font-black text-emerald-400 mt-2">${formatIdr(totalAllRevenue)}</p>
         </div>
-      `).join('');
+      `;
+
+      // 2. Kartu Masing-Masing Cabang
+      branches.forEach(b => {
+        const bCode = b.branch_code;
+        const bName = b.branch_name || bCode;
+        const isActive = (current === bCode || current === bName);
+        const data = perfMap[bCode] || perfMap[bName] || { rev: 0, trx: 0 };
+
+        html += `
+          <div onclick="loadData('${bCode}')" class="cursor-pointer p-4 rounded-xl border transition-all ${isActive ? 'bg-emerald-600/20 border-emerald-500 ring-2 ring-emerald-500/40 shadow-lg scale-[1.02]' : 'bg-slate-800/40 border-slate-700/60 hover:border-slate-500 hover:bg-slate-800'}">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold truncate ${isActive ? 'text-emerald-300' : 'text-white'}">${bName}</span>
+              ${isActive ? '<span class="text-[9px] bg-emerald-500 text-white font-bold px-1.5 py-0.5 rounded">AKTIF</span>' : ''}
+            </div>
+            <p class="text-[10px] text-slate-400 mt-1 truncate">${b.city || 'Cabang'} · ${data.trx} Order</p>
+            <p class="text-xs font-black text-emerald-400 mt-2">${formatIdr(data.rev)}</p>
+          </div>
+        `;
+      });
+
+      container.innerHTML = html;
+      document.getElementById('branchBadgeCount').innerText = `${branches.length} Cabang Terdaftar`;
     }
 
-    function renderKpis(kpi) {
+    function renderKpis(kpi, branch) {
       document.getElementById('kpiRevenue').innerText = formatIdr(kpi.totalRevenue);
       document.getElementById('kpiTrx').innerText = (kpi.totalTrx || 0).toLocaleString('id-ID');
       document.getElementById('kpiQty').innerText = `${(kpi.totalQty || 0).toLocaleString('id-ID')} pcs`;
       document.getElementById('kpiTopProduct').innerText = kpi.topProduct || '-';
+
+      const sub = branch ? `● Cabang: ${branch}` : '● Konsolidasi Semua Cabang';
+      document.getElementById('kpiFilterSub').innerText = sub;
+      document.getElementById('chartSubTitle').innerText = branch ? `Tren 7 hari untuk ${branch}` : 'Aktivitas 7 hari seluruh cabang';
+      document.getElementById('tableSubTitle').innerText = branch ? `Riwayat order khusus ${branch}` : 'Data live dari seluruh kasir cabang';
     }
 
     function renderCharts(c) {
@@ -361,7 +395,7 @@
     function renderTransactions(trxs) {
       const tbody = document.getElementById('trxTableBody');
       if (trxs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Tidak ada transaksi.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500">Belum ada transaksi untuk cabang ini.</td></tr>';
         return;
       }
       tbody.innerHTML = trxs.map(t => `
@@ -372,26 +406,24 @@
           <td class="py-3 px-4 text-slate-200">${t.product_name || '-'}</td>
           <td class="py-3 px-4 text-center font-bold">${t.qty}</td>
           <td class="py-3 px-4 text-right font-black text-emerald-400">${formatIdr(t.total_amount)}</td>
-          <td class="py-3 px-4 text-slate-400 text-[11px]">${t.branch_name || t.branch_code}</td>
+          <td class="py-3 px-4 text-slate-400 text-[11px] font-semibold">${t.branch_name || t.branch_code}</td>
         </tr>
       `).join('');
     }
 
-    function onBranchChange(val) { loadData(val); }
-
     function exportToCsv() {
       if (!currentData || !currentData.transactions || currentData.transactions.length === 0) {
-        alert('Tidak ada transaksi untuk diekspor!');
+        alert('Tidak ada data transaksi untuk diekspor!');
         return;
       }
-      const headers = ['No Trx', 'Tanggal', 'Pelanggan', 'Produk', 'Qty', 'Total (IDR)', 'Cabang'];
+      const headers = ['No Trx', 'Tanggal', 'Pelanggan', 'Produk', 'Qty', 'Total IDR', 'Cabang'];
       const rows = currentData.transactions.map(t => [
         t.trx_id, t.trx_date ? t.trx_date.split('T')[0] : '', `"${t.customer_name || ''}"`, `"${t.product_name || ''}"`, t.qty, t.total_amount, `"${t.branch_name || ''}"`
       ]);
       const csv = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\\n');
       const link = document.createElement('a');
       link.setAttribute('href', encodeURI(csv));
-      link.setAttribute('download', `Vanguard_${new Date().toISOString().slice(0,10)}.csv`);
+      link.setAttribute('download', `Vanguard_Laporan_${activeBranch || 'Semua_Cabang'}_${new Date().toISOString().slice(0,10)}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
